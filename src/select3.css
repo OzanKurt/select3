@@ -182,3 +182,17 @@
     text-align: center;
     color: var(--color-muted, #6b7280);
 }
+.s3__group {
+    padding: 0.45rem 0.55rem 0.2rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-muted, #6b7280);
+}
+.s3__more {
+    padding: 0.45rem 0.55rem;
+    font-size: 0.75rem;
+    text-align: center;
+    color: var(--color-muted, #6b7280);
+}

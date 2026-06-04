@@ -44,11 +44,18 @@ export class Select3 {
             searchable: options.searchable ?? true,
             noResults: options.noResults ?? 'No results',
             createText: options.createText ?? ((q) => `Create “${q}”`),
+            ajax: select.dataset.ajax ?? options.ajax ?? null,
+            minChars: options.minChars ?? (select.dataset.ajax || options.ajax ? 1 : 0),
+            maxRender: options.maxRender ?? 100,
+            loadingText: options.loadingText ?? 'Searching…',
+            moreText: options.moreText ?? ((n) => `${n} more — refine your search`),
         };
         this.uid = `s3-${++uid}`;
         this.isOpen = false;
         this.activeIndex = 0;
         this.matches = [];
+        this.remoteValues = [];
+        this._debounce = null;
         this._onDocClick = (e) => {
             if (!this.wrap.contains(e.target)) this.close();
         };
@@ -72,6 +79,7 @@ export class Select3 {
             selected: o.selected,
             disabled: o.disabled,
             placeholder: o.value === '',
+            group: o.parentElement?.tagName === 'OPTGROUP' ? o.parentElement.label : null,
         }));
     }
 
@@ -145,7 +153,8 @@ export class Select3 {
         });
         this.search.addEventListener('input', () => {
             this.activeIndex = 0;
-            this._renderOptions();
+            if (this.config.ajax) this._scheduleRemote();
+            else this._renderOptions();
         });
         this.search.addEventListener('keydown', (e) => this._onSearchKey(e));
         this.display.addEventListener('click', (e) => {
@@ -296,21 +305,77 @@ export class Select3 {
         return tag;
     }
 
+    /** Debounced remote search (AJAX mode). */
+    _scheduleRemote() {
+        clearTimeout(this._debounce);
+        if (this.search.value.trim().length < this.config.minChars) {
+            this.remoteValues = [];
+            this._renderOptions();
+            return;
+        }
+        this._renderMessage(this.config.loadingText);
+        this._debounce = setTimeout(() => this._remoteSearch(this.search.value.trim()), 250);
+    }
+
+    async _remoteSearch(query) {
+        try {
+            const sep = this.config.ajax.includes('?') ? '&' : '?';
+            const res = await fetch(`${this.config.ajax}${sep}q=${encodeURIComponent(query)}`, {
+                headers: { Accept: 'application/json' },
+            });
+            const data = await res.json();
+            const rows = Array.isArray(data) ? data : (data.results ?? data.data ?? []);
+            const existing = new Set([...this.select.options].map((o) => o.value));
+            rows.forEach((r) => {
+                const value = String(r.value ?? r.id);
+                if (!existing.has(value)) this.select.add(new Option(String(r.label ?? r.text ?? value), value));
+            });
+            this.remoteValues = rows.map((r) => String(r.value ?? r.id));
+            this._renderOptions();
+        } catch {
+            this._renderMessage('Could not load results.');
+        }
+    }
+
+    _renderMessage(text) {
+        this.listbox.replaceChildren();
+        const m = el('div', 's3__empty');
+        m.textContent = text;
+        this.listbox.append(m);
+    }
+
     _renderOptions() {
         const query = fold(this.search.value);
-        this.matches = this._items().filter((i) => !i.placeholder && (!query || fold(i.label).includes(query)));
+        const all = this._items().filter((i) => !i.placeholder);
+
+        const matched = this.config.ajax
+            ? all.filter((i) => i.selected || this.remoteValues.includes(i.value))
+            : all.filter((i) => !query || fold(i.label).includes(query));
+
+        const overflow = Math.max(0, matched.length - this.config.maxRender);
+        this.matches = matched.slice(0, this.config.maxRender);
         this.listbox.replaceChildren();
 
-        const canCreate = this.config.tags && this.search.value.trim() && !this.matches.some((m) => fold(m.label) === query);
+        const canCreate = this.config.tags && this.search.value.trim() && !matched.some((m) => fold(m.label) === query);
 
         if (!this.matches.length && !canCreate) {
-            const empty = el('div', 's3__empty');
-            empty.textContent = this.config.noResults;
-            this.listbox.append(empty);
+            this._renderMessage(
+                this.config.ajax && this.search.value.trim().length < this.config.minChars
+                    ? 'Type to search…'
+                    : this.config.noResults,
+            );
             return;
         }
 
+        let lastGroup = null;
         this.matches.forEach((item, idx) => {
+            if (item.group && item.group !== lastGroup) {
+                const header = el('div', 's3__group');
+                header.textContent = item.group;
+                this.listbox.append(header);
+            }
+            lastGroup = item.group;
+
             const option = el('div', 's3__option');
             option.id = `${this.uid}-opt-${idx}`;
             option.setAttribute('role', 'option');
@@ -339,6 +404,12 @@ export class Select3 {
             create.textContent = this.config.createText(this.search.value.trim());
             create.addEventListener('click', () => this.createTag(this.search.value));
             this.listbox.append(create);
+        }
+
+        if (overflow > 0) {
+            const more = el('div', 's3__more');
+            more.textContent = this.config.moreText(overflow);
+            this.listbox.append(more);
         }
 
         this._highlight();
