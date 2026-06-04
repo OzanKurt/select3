@@ -1,0 +1,20 @@
+{
+    "name": "@ozankurt/select3",
+    "version": "0.0.0",
+    "description": "Modern, dependency-free select component — successor to Select2 / Tom Select / SumoSelect. Feature spec in select3-plan.md.",
+    "type": "module",
+    "main": "./src/index.js",
+    "module": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./css": "./src/select3.css"
+    },
+    "files": [
+        "src"
+    ],
+    "scripts": {
+        "test": "echo \"select3 tests live in their own track\" && exit 0"
+    },
+    "license": "MIT",
+    "author": "Ozan Kurt"
+}
