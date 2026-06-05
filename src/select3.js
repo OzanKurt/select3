@@ -56,9 +56,24 @@ export class Select3 {
         this.matches = [];
         this.remoteValues = [];
         this._debounce = null;
+        this._abort = null;
+        this._remoteToken = 0;
         this._onDocClick = (e) => {
             if (!this.wrap.contains(e.target)) this.close();
         };
+
+        // Resolve the native select's accessible name so the visible widgets
+        // (control + search) inherit it. Prefer a wiring (aria-labelledby) over
+        // copying text so the label stays the single source of truth.
+        const label =
+            (select.id && document.querySelector(`label[for="${select.id}"]`)) ||
+            select.closest('label');
+        this._labelId = null;
+        this._ariaLabel = select.getAttribute('aria-label');
+        if (label) {
+            if (!label.id) label.id = `${this.uid}-label`;
+            this._labelId = label.id;
+        }
 
         // Required on a hidden field breaks constraint validation; the server
         // validates instead, so surface it via aria only.
@@ -96,9 +111,9 @@ export class Select3 {
 
         this.control = el('div', 's3__control');
         this.control.tabIndex = this.select.disabled ? -1 : 0;
-        this.control.setAttribute('role', 'combobox');
+        // The control opens the listbox but is not the combobox itself; the
+        // focused search input carries the combobox semantics (see below).
         this.control.setAttribute('aria-haspopup', 'listbox');
-        this.control.setAttribute('aria-expanded', 'false');
         if (this._ariaRequired) this.control.setAttribute('aria-required', 'true');
 
         this.display = el('div', 's3__display');
@@ -119,8 +134,12 @@ export class Select3 {
         const searchWrap = el('div', 's3__search-wrap');
         this.search = el('input', 's3__search');
         this.search.type = 'text';
-        this.search.setAttribute('role', 'searchbox');
+        // The search input is the focused combobox: it owns the listbox
+        // relationship, expanded state and active-descendant pointer.
+        this.search.setAttribute('role', 'combobox');
         this.search.setAttribute('aria-autocomplete', 'list');
+        this.search.setAttribute('aria-expanded', 'false');
+        if (this._ariaRequired) this.search.setAttribute('aria-required', 'true');
         if (!this.config.searchable) searchWrap.style.display = 'none';
         searchWrap.append(this.search);
 
@@ -130,7 +149,19 @@ export class Select3 {
         if (this.multiple) this.listbox.setAttribute('aria-multiselectable', 'true');
 
         this.dropdown.append(searchWrap, this.listbox);
-        this.control.setAttribute('aria-controls', this.listbox.id);
+        this.search.setAttribute('aria-controls', this.listbox.id);
+
+        // Accessible name: wire the resolved label to the visible widgets, or
+        // copy aria-label when there is no labelable element.
+        if (this._labelId) {
+            this.control.setAttribute('aria-labelledby', this._labelId);
+            this.search.setAttribute('aria-labelledby', this._labelId);
+            this.listbox.setAttribute('aria-labelledby', this._labelId);
+        } else if (this._ariaLabel) {
+            this.control.setAttribute('aria-label', this._ariaLabel);
+            this.search.setAttribute('aria-label', this._ariaLabel);
+            this.listbox.setAttribute('aria-label', this._ariaLabel);
+        }
 
         this.wrap.append(this.control, this.dropdown);
         this.select.after(this.wrap);
@@ -194,7 +225,7 @@ export class Select3 {
         if (this.select.disabled || this.isOpen) return;
         this.isOpen = true;
         this.wrap.classList.add('s3--open');
-        this.control.setAttribute('aria-expanded', 'true');
+        this.search.setAttribute('aria-expanded', 'true');
         this.search.value = '';
         this.activeIndex = 0;
         this._renderOptions();
@@ -206,7 +237,8 @@ export class Select3 {
         if (!this.isOpen) return;
         this.isOpen = false;
         this.wrap.classList.remove('s3--open');
-        this.control.setAttribute('aria-expanded', 'false');
+        this.search.setAttribute('aria-expanded', 'false');
+        this.search.removeAttribute('aria-activedescendant');
         document.removeEventListener('click', this._onDocClick);
     }
 
@@ -255,12 +287,19 @@ export class Select3 {
     }
 
     createTag(label) {
-        const value = label.trim();
-        if (!value) return;
-        if (![...this.select.options].some((o) => o.value === value)) {
-            this.select.add(new Option(value, value));
+        const text = label.trim();
+        if (!text) return;
+        // Use the same folded-label key as canCreate so a tag that already
+        // exists (case/diacritic-insensitively) reuses that option's value
+        // instead of creating a duplicate.
+        const folded = fold(text);
+        const existing = [...this.select.options].find((o) => fold(o.textContent.trim()) === folded);
+        if (existing) {
+            this.choose(existing.value);
+            return;
         }
-        this.choose(value);
+        this.select.add(new Option(text, text));
+        this.choose(text);
     }
 
     _emit() {
@@ -282,7 +321,10 @@ export class Select3 {
         }
 
         const hasValue = selected.length > 0;
-        this.clear.style.display = this.config.allowClear && hasValue ? '' : 'none';
+        // A required single-select must never be emptiable client-side, so the
+        // clear control is suppressed regardless of allowClear.
+        const canClear = this.config.allowClear && !(this._ariaRequired && !this.multiple);
+        this.clear.style.display = canClear && hasValue ? '' : 'none';
         this.wrap.classList.toggle('s3--has-value', hasValue);
     }
 
@@ -309,6 +351,9 @@ export class Select3 {
     _scheduleRemote() {
         clearTimeout(this._debounce);
         if (this.search.value.trim().length < this.config.minChars) {
+            // Abort any pending request so a late response can't repopulate.
+            if (this._abort) this._abort.abort();
+            this._abort = null;
             this.remoteValues = [];
             this._renderOptions();
             return;
@@ -318,21 +363,52 @@ export class Select3 {
     }
 
     async _remoteSearch(query) {
+        // Cancel the previous in-flight request and stamp this one so we can
+        // discard responses that resolve out of order or after close.
+        if (this._abort) this._abort.abort();
+        const controller = new AbortController();
+        this._abort = controller;
+        const token = ++this._remoteToken;
+
         try {
             const sep = this.config.ajax.includes('?') ? '&' : '?';
             const res = await fetch(`${this.config.ajax}${sep}q=${encodeURIComponent(query)}`, {
                 headers: { Accept: 'application/json' },
+                signal: controller.signal,
             });
+            if (!res.ok) throw new Error(res.status);
             const data = await res.json();
+
+            // Bail if a newer request superseded us or the dropdown closed.
+            if (token !== this._remoteToken || !this.isOpen) return;
+
             const rows = Array.isArray(data) ? data : (data.results ?? data.data ?? []);
+            const newValues = rows.map((r) => String(r.value ?? r.id));
+            const fresh = new Set(newValues);
+
+            // Prune previously-injected remote options that are no longer in the
+            // result set and not currently selected, so stale rows don't linger.
+            [...this.select.options].forEach((o) => {
+                if (o.dataset.s3remote === '1' && !o.selected && !fresh.has(o.value)) {
+                    o.remove();
+                }
+            });
+
             const existing = new Set([...this.select.options].map((o) => o.value));
             rows.forEach((r) => {
                 const value = String(r.value ?? r.id);
-                if (!existing.has(value)) this.select.add(new Option(String(r.label ?? r.text ?? value), value));
+                if (!existing.has(value)) {
+                    const option = new Option(String(r.label ?? r.text ?? value), value);
+                    option.dataset.s3remote = '1';
+                    this.select.add(option);
+                    existing.add(value);
+                }
             });
-            this.remoteValues = rows.map((r) => String(r.value ?? r.id));
+            this.remoteValues = newValues;
             this._renderOptions();
-        } catch {
+        } catch (e) {
+            if (e?.name === 'AbortError') return;
+            if (token !== this._remoteToken || !this.isOpen) return;
             this._renderMessage('Could not load results.');
         }
     }
@@ -356,7 +432,13 @@ export class Select3 {
         this.matches = matched.slice(0, this.config.maxRender);
         this.listbox.replaceChildren();
 
-        const canCreate = this.config.tags && this.search.value.trim() && !matched.some((m) => fold(m.label) === query);
+        // Offer "create" only when no existing option matches the folded label.
+        // Compare against every option (not just the rendered matches) using the
+        // same folded key createTag() reuses, so the two never disagree.
+        const canCreate =
+            this.config.tags &&
+            this.search.value.trim() &&
+            !all.some((i) => fold(i.label) === query);
 
         if (!this.matches.length && !canCreate) {
             this._renderMessage(
@@ -412,13 +494,34 @@ export class Select3 {
             this.listbox.append(more);
         }
 
+        // Make sure the resting highlight is on a selectable row, never a
+        // disabled one (e.g. when the first match is disabled after a search).
+        const rows = [...this.listbox.querySelectorAll('.s3__option')];
+        const current = rows[this.activeIndex];
+        if (current && current.classList.contains('is-disabled')) {
+            const next = rows.findIndex((o, i) => i >= this.activeIndex && !o.classList.contains('is-disabled'));
+            this.activeIndex = next === -1
+                ? rows.findIndex((o) => !o.classList.contains('is-disabled'))
+                : next;
+            if (this.activeIndex === -1) this.activeIndex = 0;
+        }
+
         this._highlight();
     }
 
     _move(direction) {
-        const count = this.listbox.querySelectorAll('.s3__option').length;
+        const options = [...this.listbox.querySelectorAll('.s3__option')];
+        const count = options.length;
         if (!count) return;
-        this.activeIndex = (this.activeIndex + direction + count) % count;
+        // Advance in the requested direction, skipping disabled rows so the
+        // highlight never rests on an unselectable option. The loop guard caps
+        // iterations at `count` in case every option is disabled.
+        let index = this.activeIndex;
+        for (let i = 0; i < count; i++) {
+            index = (index + direction + count) % count;
+            if (!options[index].classList.contains('is-disabled')) break;
+        }
+        this.activeIndex = index;
         this._highlight();
     }
 
@@ -428,7 +531,9 @@ export class Select3 {
         const active = options[this.activeIndex];
         if (active) {
             active.scrollIntoView({ block: 'nearest' });
-            this.control.setAttribute('aria-activedescendant', active.id);
+            this.search.setAttribute('aria-activedescendant', active.id);
+        } else {
+            this.search.removeAttribute('aria-activedescendant');
         }
     }
 
@@ -452,6 +557,14 @@ export class Select3 {
 
     destroy() {
         document.removeEventListener('click', this._onDocClick);
+        clearTimeout(this._debounce);
+        if (this._abort) this._abort.abort();
+        this._abort = null;
+        // Restore the original <select> option set by dropping every option we
+        // injected from AJAX, regardless of selected state.
+        [...this.select.options].forEach((o) => {
+            if (o.dataset.s3remote === '1') o.remove();
+        });
         this.wrap.remove();
         this.select.classList.remove('s3-native');
         this.select.removeAttribute('aria-hidden');
