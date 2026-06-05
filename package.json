@@ -1,7 +1,7 @@
 {
     "name": "@ozankurt/select3",
-    "version": "0.0.0",
-    "description": "Modern, dependency-free select component — successor to Select2 / Tom Select / SumoSelect. Feature spec in select3-plan.md.",
+    "version": "0.1.0",
+    "description": "Modern, dependency-free <select> enhancer: single/multi, scoring search, tagging, AJAX and a WAI-ARIA combobox. The successor to Select2 / Tom Select / SumoSelect.",
     "type": "module",
     "main": "./src/index.js",
     "module": "./src/index.js",
@@ -10,10 +10,36 @@
         "./css": "./src/select3.css"
     },
     "files": [
-        "src"
+        "src",
+        "README.md"
     ],
+    "sideEffects": [
+        "*.css"
+    ],
+    "keywords": [
+        "select",
+        "select2",
+        "tom-select",
+        "combobox",
+        "dropdown",
+        "autocomplete",
+        "tagging",
+        "multiselect",
+        "accessibility",
+        "aria",
+        "vanilla-js",
+        "no-jquery"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/OzanKurt/select3.git"
+    },
+    "homepage": "https://github.com/OzanKurt/select3#readme",
+    "bugs": {
+        "url": "https://github.com/OzanKurt/select3/issues"
+    },
     "scripts": {
-        "test": "echo \"select3 tests live in their own track\" && exit 0"
+        "test": "echo \"select3 tests live in the consuming app's Vitest suite\" && exit 0"
     },
     "license": "MIT",
     "author": "Ozan Kurt"
