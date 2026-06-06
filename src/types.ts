@@ -18,6 +18,12 @@ export interface Select3Options {
     hidePlaceholder?: boolean;
     maxItems?: number | null;
     maxReachedText?: (max: number) => string;
+    // Search (P2).
+    searchField?: string[];
+    sort?: boolean;
+    highlight?: boolean;
+    minResultsForSearch?: number;
+    maxInputLength?: number;
 }
 
 /** Resolved, fully-populated config held on the instance. */
@@ -34,6 +40,8 @@ export interface Item {
     disabled: boolean;
     placeholder: boolean;
     group: string | null;
+    /** The option's data-* attributes, for multi-field search. */
+    data?: Record<string, string | undefined>;
 }
 
 /** Shape accepted by addOption()/addOptions(). */

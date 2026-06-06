@@ -44,6 +44,13 @@
     opacity: 0.6;
     cursor: not-allowed;
 }
+.s3--locked .s3__control {
+    cursor: default;
+}
+.s3--locked .s3__clear,
+.s3--locked .s3__tag-remove {
+    display: none;
+}
 
 .s3__display {
     display: flex;
@@ -172,6 +179,12 @@
 .s3__check {
     font-size: 0.75rem;
     color: var(--color-primary-600, #2563eb);
+}
+.s3__mark {
+    padding: 0 0.05rem;
+    color: inherit;
+    background-color: color-mix(in srgb, var(--color-primary-500, #3b82f6) 30%, transparent);
+    border-radius: 0.15rem;
 }
 .s3__create {
     color: var(--color-primary-600, #2563eb);

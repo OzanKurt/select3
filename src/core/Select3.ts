@@ -17,6 +17,9 @@
 import type { Select3Options, Select3Config, Item, AddOptionInput } from '../types';
 import { Emitter } from './emitter';
 import type { Handler } from './emitter';
+import { fold } from '../search/diacritics';
+import { scoreItem } from '../search/sifter';
+import { highlight } from '../search/highlight';
 
 declare global {
     interface HTMLSelectElement {
@@ -37,12 +40,6 @@ const iconEl = (className: string): HTMLElement => {
     i.className = className;
     return i;
 };
-
-const fold = (s: string): string =>
-    (s || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '');
 
 export class Select3 {
     select: HTMLSelectElement;
@@ -73,6 +70,7 @@ export class Select3 {
     dropdown!: HTMLDivElement;
     search!: HTMLInputElement;
     listbox!: HTMLDivElement;
+    private _searchWrap!: HTMLDivElement;
 
     constructor(select: HTMLSelectElement, options: Select3Options = {}) {
         this.select = select;
@@ -95,6 +93,11 @@ export class Select3 {
             hidePlaceholder: options.hidePlaceholder ?? false,
             maxItems: options.maxItems ?? null,
             maxReachedText: options.maxReachedText ?? ((max: number) => `Limit of ${max} reached`),
+            searchField: options.searchField ?? ['label'],
+            sort: options.sort ?? true,
+            highlight: options.highlight ?? true,
+            minResultsForSearch: options.minResultsForSearch ?? 0,
+            maxInputLength: options.maxInputLength ?? 0,
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -136,6 +139,7 @@ export class Select3 {
                 o.parentElement?.tagName === 'OPTGROUP'
                     ? (o.parentElement as HTMLOptGroupElement).label
                     : null,
+            data: { ...o.dataset },
         }));
     }
 
@@ -181,8 +185,10 @@ export class Select3 {
         this.search.setAttribute('aria-autocomplete', 'list');
         this.search.setAttribute('aria-expanded', 'false');
         if (this._ariaRequired) this.search.setAttribute('aria-required', 'true');
+        if (this.config.maxInputLength > 0) this.search.maxLength = this.config.maxInputLength;
         if (!this.config.searchable) searchWrap.style.display = 'none';
         searchWrap.append(this.search);
+        this._searchWrap = searchWrap;
 
         this.listbox = el('div', 's3__options');
         this.listbox.id = `${this.uid}-list`;
@@ -281,7 +287,12 @@ export class Select3 {
         this.activeIndex = 0;
         this._renderOptions();
         document.addEventListener('click', this._onDocClick);
-        if (this.config.searchable) setTimeout(() => this.search.focus(), 0);
+        // Hide the search box when there are too few options to be worth filtering.
+        const showSearch =
+            this.config.searchable &&
+            this._items().filter((i) => !i.placeholder).length > this.config.minResultsForSearch;
+        this._searchWrap.style.display = showSearch ? '' : 'none';
+        if (showSearch) setTimeout(() => this.search.focus(), 0);
         if (this.config.hidePlaceholder) this.sync();
         this._emitter.emit('open');
     }
@@ -497,12 +508,26 @@ export class Select3 {
     }
 
     _renderOptions(): void {
+        const rawQuery = this.search.value.trim();
         const query = fold(this.search.value);
         const all = this._items().filter((i) => !i.placeholder);
 
-        const matched = this.config.ajax
-            ? all.filter((i) => i.selected || this.remoteValues.includes(i.value))
-            : all.filter((i) => !query || fold(i.label).includes(query));
+        let matched: Item[];
+        if (this.config.ajax) {
+            matched = all.filter((i) => i.selected || this.remoteValues.includes(i.value));
+        } else if (!rawQuery) {
+            matched = all;
+        } else {
+            // Score every option, drop non-matches, then rank by relevance with
+            // original order as the stable tie-break.
+            const scored = all
+                .map((item, order) => ({ item, order, score: scoreItem(item, rawQuery, this.config.searchField) }))
+                .filter((x) => x.score > 0);
+            if (this.config.sort) {
+                scored.sort((a, b) => b.score - a.score || a.order - b.order);
+            }
+            matched = scored.map((x) => x.item);
+        }
 
         const overflow = Math.max(0, matched.length - this.config.maxRender);
         this.matches = matched.slice(0, this.config.maxRender);
@@ -542,7 +567,11 @@ export class Select3 {
             option.classList.toggle('is-disabled', item.disabled);
 
             const label = el('span');
-            label.textContent = item.label;
+            if (this.config.highlight && rawQuery) {
+                highlight(item.label, rawQuery).forEach((n) => label.appendChild(n));
+            } else {
+                label.textContent = item.label;
+            }
             option.append(label);
             if (item.selected) option.append(iconEl('fa-solid fa-check s3__check'));
 
