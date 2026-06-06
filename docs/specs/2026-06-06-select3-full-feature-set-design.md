@@ -190,6 +190,14 @@ Existing + : `addOption`, `addOptions`, `updateOption`, `removeOption`, `getOpti
 ### 4.18 Accessibility
 WAI-ARIA 1.2 combobox: search input `role=combobox` + `aria-expanded/controls/activedescendant` (current); listbox + options labelled; live region for load/no-results; full keyboard map incl. `Ctrl+A`/`Ctrl+Shift+A` (select/deselect all in multi), caret nav between tags, Home/End, type-ahead.
 
+### 4.19 Rich option data
+Every option carries an optional arbitrary data bag (`icon`, `image`, `description`, `badge`, plus user-defined fields), normalized into the `Item` model from three sources:
+- **DOM**: `data-*` on `<option>` (e.g. `data-icon`, `data-image`, `data-s3='{...}'` JSON) + `optgroup` nesting.
+- **Array**: option objects `{ value, label, icon?, image?, description?, badge?, group?, ... }`.
+- **AJAX rows**: same object shape; extra fields pass through `processResults` untouched.
+
+Consumed by: template slots (`option`/`item`/`caption` receive the full data bag), `searchField` (search across any field, default `label`), and `highlight`. This is the binding surface the companion Laravel package targets, so it is a first-class part of the model, not a template-only concern.
+
 ---
 
 ## 5. Testing strategy
@@ -219,7 +227,8 @@ WAI-ARIA 1.2 combobox: search input `role=combobox` + `aria-expanded/controls/ac
 - **P8 — Virtual scroll + native-mobile fallback**.
 - **P9 — Plugins**: hook registry + drag-drop, csv-output, optgroup-columns.
 - **P10 — Framework adapters**: react, vue, alpine.
-- **P11 — Docs + demo + review**: README/API docs, a `/forms` showcase in `new/`, full adversarial review, version bump + publish, repoint app.
+- **P11 — Docs + demo + review**: README/API docs, a `/forms` showcase in `new/`, full adversarial review, version bump (1.0.0) + publish, repoint app.
+- **P12 — Companion `@ozankurt/laravel-select3`** (separate Composer repo, its own spec): fluent builder, Blade `<x-select3>`, config publish, Eloquent `fromModel`, AJAX server endpoint helper returning `{results, hasMore}` with rich per-row data, validation + CSRF wiring. Built only after the JS config + option-data contract is frozen at P11.
 
 Each phase: implement → Vitest → keep prior phases green → commit (conventional, no AI attribution).
 
@@ -235,3 +244,21 @@ Each phase: implement → Vitest → keep prior phases green → commit (convent
 - Final version: ship phases under `0.2.x`, cut **1.0.0** at P11. (Default: yes.)
 - i18n packs to ship first: en, es, fr, de, tr. (Extensible later.)
 - Adapters: ship react + vue + alpine; Angular deferred (community). (Default: yes.)
+
+---
+
+## 10. Companion package: `@ozankurt/laravel-select3` (separate sub-project)
+
+A downstream Composer package (its own repo + its own spec) whose job is to generate the markup, JSON config, and AJAX responses the JS consumes. Built at **P12**, after the JS contract freezes (P11), so it never binds to a moving API.
+
+**Surface**
+- **Fluent builder** — `Select3::make('city')->placeholder()->options()|->fromModel(City::class,'name','id')->groups()->ajax(route('cities'))->searchable()->tags()->maxItems()->theme('bootstrap5')->locale('tr')->icon($cb)->image($cb)->badge($cb)->description($cb)->template($slot,$view)` → renders `<select data-select3>` + a `data-s3-config` JSON blob.
+- **Blade** — `<x-select3 name= :options= :config= />`; `@select3Config` global defaults.
+- **Eloquent** — `fromModel()` / `fromQuery()` with searchable columns, ordering, and per-row extra data (icon/image/description/badge) via a row mapper.
+- **AJAX server helper** — a controller/trait (`HandlesSelect3Search`) that maps `?q=&page=` to `{ results: [{value,label,icon,image,...}], hasMore }` with pagination + diacritic-aware search, matching the JS adapter's expected shape (§4.5).
+- **Config publish** — global theme/locale/debounce/min-chars defaults.
+- **Validation + CSRF** — request rule helpers; CSRF header wiring for the AJAX endpoint.
+
+**Dependency direction**: PHP → emits config → JS reads. The JS package never depends on PHP. The PHP package pins a compatible JS version range and documents the `data-s3-config` schema as the contract.
+
+**JS prerequisite (already folded into §4.19)**: rich per-option data must flow end-to-end (DOM `data-*` / array objects / AJAX rows) and be consumed by templates + search + highlight — that is exactly what the builder binds to.
