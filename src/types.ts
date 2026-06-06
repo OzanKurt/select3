@@ -128,6 +128,9 @@ export interface Select3Options {
     rtl?: boolean;
     size?: 'sm' | 'md' | 'lg';
     templates?: Select3Templates;
+    // Virtual scroll (P8): window large lists to a handful of rendered rows.
+    virtualScroll?: boolean;
+    itemHeight?: number;
     // Plugins (P9).
     plugins?: Array<string | PluginFactory | { name: string; options?: Record<string, unknown> }>;
 }

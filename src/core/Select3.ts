@@ -30,6 +30,7 @@ import { fold } from '../search/diacritics';
 import { scoreItem } from '../search/sifter';
 import { highlight } from '../search/highlight';
 import { resolveDropdownParent, computeFlip, placeDropdown, resetDropdown } from '../render/position';
+import { computeWindow } from '../render/virtual';
 import { AjaxAdapter, defaultTransport, defaultProcessResults } from '../data/ajax-adapter';
 import { resolveLocale } from '../i18n/registry';
 import type { RemoteRow } from '../types';
@@ -102,6 +103,9 @@ export class Select3 {
     private _reposition: () => void;
     private _okSnapshot: string[] | null = null;
     private _plugins: Select3Plugin[] = [];
+    private _virtual = false;
+    private _virtualRender: (() => void) | null = null;
+    private _vRaf = 0;
 
     // Visual nodes (assigned in _build, before first use).
     wrap!: HTMLDivElement;
@@ -174,6 +178,8 @@ export class Select3 {
             createFilter: normalizeCreateFilter(options.createFilter),
             persist: options.persist ?? true,
             addPrecedence: options.addPrecedence ?? false,
+            virtualScroll: options.virtualScroll ?? false,
+            itemHeight: options.itemHeight ?? 36,
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -431,8 +437,16 @@ export class Select3 {
             if (this.config.ajax) this._remoteInput();
             else this._renderOptions();
         });
-        // Infinite scroll: near the bottom, ask the adapter for the next page.
+        // Scroll: drive virtual-list windowing, else AJAX infinite-scroll paging.
         this.listbox.addEventListener('scroll', () => {
+            if (this._virtual) {
+                if (this._vRaf) return;
+                this._vRaf = requestAnimationFrame(() => {
+                    this._vRaf = 0;
+                    this._virtualRender?.();
+                });
+                return;
+            }
             if (!this.config.ajax || !this._hasMore || !this._ajax) return;
             const lb = this.listbox;
             if (lb.scrollTop + lb.clientHeight >= lb.scrollHeight - 24) this._ajax.more();
@@ -855,6 +869,73 @@ export class Select3 {
         return frag;
     }
 
+    /** Build one dropdown option row (shared by the normal + virtual renderers). */
+    private _buildOption(item: Item, index: number, rawQuery: string, checkboxMode: boolean): HTMLDivElement {
+        const option = el('div', 's3__option');
+        option.id = `${this.uid}-opt-${index}`;
+        option.dataset.index = String(index);
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', item.selected ? 'true' : 'false');
+        option.classList.toggle('is-selected', item.selected);
+        option.classList.toggle('is-disabled', item.disabled);
+
+        if (checkboxMode) {
+            option.classList.add('s3__option--cb');
+            const box = el('span', 's3__checkbox');
+            if (item.selected) box.classList.add('is-checked');
+            option.append(box);
+        }
+
+        option.append(this._optionContent(item, rawQuery));
+        if (item.selected && !checkboxMode) option.append(iconEl('fa-solid fa-check s3__check'));
+
+        option.addEventListener('mouseenter', () => {
+            this.activeIndex = index;
+            this._highlight();
+        });
+        option.addEventListener('click', () => {
+            if (item.disabled) return;
+            item.selected && this.multiple ? this.deselect(item.value) : this.choose(item.value);
+        });
+        return option;
+    }
+
+    /**
+     * Render only the visible window of a large list, with spacer divs above and
+     * below so the scrollbar stays proportional. Groups / select-all / create are
+     * intentionally not shown in virtual mode (it targets large flat lists).
+     */
+    private _renderVirtual(matched: Item[], rawQuery: string): void {
+        this.matches = matched;
+        this._virtual = true;
+        if (!matched.length) {
+            this._virtualRender = null;
+            this._renderMessage(this.config.noResults);
+            return;
+        }
+        const itemH = this.config.itemHeight;
+        const checkboxMode = this.multiple && this.config.checkboxes;
+        this._virtualRender = (): void => {
+            const win = computeWindow(this.listbox.scrollTop, this.listbox.clientHeight || 240, itemH, matched.length);
+            this.listbox.replaceChildren();
+            const top = el('div', 's3__vspace');
+            top.style.height = `${win.padTop}px`;
+            this.listbox.append(top);
+            for (let i = win.start; i < win.end; i++) {
+                const item = matched[i];
+                if (!item) continue;
+                const option = this._buildOption(item, i, rawQuery, checkboxMode);
+                option.style.height = `${itemH}px`;
+                this.listbox.append(option);
+            }
+            const bottom = el('div', 's3__vspace');
+            bottom.style.height = `${win.padBottom}px`;
+            this.listbox.append(bottom);
+            this._highlight();
+        };
+        this._virtualRender();
+    }
+
     _renderOptions(): void {
         const rawQuery = this.search.value.trim();
         const query = fold(this.search.value);
@@ -875,6 +956,13 @@ export class Select3 {
                 scored.sort((a, b) => b.score - a.score || a.order - b.order);
             }
             matched = scored.map((x) => x.item);
+        }
+
+        // Virtual scroll: window a large (non-AJAX) list to a few rendered rows.
+        this._virtual = false;
+        if (this.config.virtualScroll && !this.config.ajax) {
+            this._renderVirtual(matched, rawQuery);
+            return;
         }
 
         const overflow = Math.max(0, matched.length - this.config.maxRender);
@@ -938,33 +1026,7 @@ export class Select3 {
                 this.listbox.append(header);
             }
             lastGroup = item.group;
-
-            const option = el('div', 's3__option');
-            option.id = `${this.uid}-opt-${idx}`;
-            option.setAttribute('role', 'option');
-            option.setAttribute('aria-selected', item.selected ? 'true' : 'false');
-            option.classList.toggle('is-selected', item.selected);
-            option.classList.toggle('is-disabled', item.disabled);
-
-            if (checkboxMode) {
-                option.classList.add('s3__option--cb');
-                const box = el('span', 's3__checkbox');
-                if (item.selected) box.classList.add('is-checked');
-                option.append(box);
-            }
-
-            option.append(this._optionContent(item, rawQuery));
-            if (item.selected && !checkboxMode) option.append(iconEl('fa-solid fa-check s3__check'));
-
-            option.addEventListener('mouseenter', () => {
-                this.activeIndex = idx;
-                this._highlight();
-            });
-            option.addEventListener('click', () => {
-                if (item.disabled) return;
-                item.selected && this.multiple ? this.deselect(item.value) : this.choose(item.value);
-            });
-            this.listbox.append(option);
+            this.listbox.append(this._buildOption(item, idx, rawQuery, checkboxMode));
         });
 
         if (canCreate) {
@@ -1021,6 +1083,24 @@ export class Select3 {
     }
 
     _move(direction: number): void {
+        if (this._virtual) {
+            const count = this.matches.length;
+            if (!count) return;
+            let index = this.activeIndex;
+            for (let i = 0; i < count; i++) {
+                index = (index + direction + count) % count;
+                if (!this.matches[index]?.disabled) break;
+            }
+            this.activeIndex = index;
+            // Keep the active row in view, then re-window around the new position.
+            const itemH = this.config.itemHeight;
+            const vh = this.listbox.clientHeight || 240;
+            const top = index * itemH;
+            if (top < this.listbox.scrollTop) this.listbox.scrollTop = top;
+            else if (top + itemH > this.listbox.scrollTop + vh) this.listbox.scrollTop = top + itemH - vh;
+            this._virtualRender?.();
+            return;
+        }
         const options = [...this.listbox.querySelectorAll('.s3__option')];
         const count = options.length;
         if (!count) return;
@@ -1038,6 +1118,18 @@ export class Select3 {
     }
 
     _highlight(): void {
+        if (this._virtual) {
+            const rows = [...this.listbox.querySelectorAll<HTMLElement>('.s3__option')];
+            rows.forEach((o) => o.classList.toggle('is-active', Number(o.dataset.index) === this.activeIndex));
+            const active = this.listbox.querySelector<HTMLElement>(`.s3__option[data-index="${this.activeIndex}"]`);
+            if (active) {
+                active.scrollIntoView({ block: 'nearest' });
+                this.search.setAttribute('aria-activedescendant', active.id);
+            } else {
+                this.search.removeAttribute('aria-activedescendant');
+            }
+            return;
+        }
         const options = [...this.listbox.querySelectorAll('.s3__option')];
         options.forEach((o, i) => o.classList.toggle('is-active', i === this.activeIndex));
         const active = options[this.activeIndex];
@@ -1050,6 +1142,13 @@ export class Select3 {
     }
 
     _chooseActive(): void {
+        if (this._virtual) {
+            const item = this.matches[this.activeIndex];
+            if (item && !item.disabled) {
+                item.selected && this.multiple ? this.deselect(item.value) : this.choose(item.value);
+            }
+            return;
+        }
         const active = this.listbox.querySelectorAll('.s3__option')[this.activeIndex];
         if (!active) return;
         if (active.classList.contains('s3__create')) {
