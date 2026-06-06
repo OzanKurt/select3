@@ -1,0 +1,25 @@
+/*
+ * @ozankurt/select3 — Bootstrap 4 preset.
+ * Bootstrap 4 has no CSS custom properties, so the palette is literal. Scoped to
+ * .s3--theme-bootstrap4; load it once and opt in per instance:
+ *   import '@ozankurt/select3/themes/bootstrap4';
+ *   createSelect3(el, { theme: 'bootstrap4' });
+ */
+.s3--theme-bootstrap4 {
+    --color-surface: #fff;
+    --color-surface-muted: #e9ecef;
+    --color-content: #212529;
+    --color-muted: #6c757d;
+    --color-border: #ced4da;
+    --color-primary-500: #007bff;
+    --color-primary-600: #0069d9;
+    --color-primary-700: #0062cc;
+}
+.s3--theme-bootstrap4 .s3__control,
+.s3--theme-bootstrap4 .s3__search {
+    border-radius: 0.25rem;
+}
+.s3--theme-bootstrap4 .s3__control {
+    /* Match Bootstrap 4's .form-control height. */
+    min-height: calc(1.5em + 0.75rem + 2px);
+}

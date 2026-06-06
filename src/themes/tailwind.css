@@ -1,12 +1,12 @@
 /*
  * @ozankurt/select3 — Tailwind preset.
- * Standalone defaults that sit well next to Tailwind's palette, with a
- * prefers-color-scheme dark variant. Override any --color-* on .s3 (or a
- * parent) to match your own theme.
- *   import '@ozankurt/select3/css';
+ * Defaults that sit well next to Tailwind's palette, with a prefers-color-scheme
+ * dark variant. Scoped to .s3--theme-tailwind; load it once and opt in per
+ * instance with { theme: 'tailwind' }. Override any --color-* on the element.
  *   import '@ozankurt/select3/themes/tailwind';
+ *   createSelect3(el, { theme: 'tailwind' });
  */
-.s3 {
+.s3--theme-tailwind {
     --color-surface: #fff;
     --color-surface-muted: #f3f4f6;
     --color-content: #111827;
@@ -18,7 +18,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-    .s3 {
+    .s3--theme-tailwind {
         --color-surface: #1f2937;
         --color-surface-muted: #374151;
         --color-content: #f9fafb;

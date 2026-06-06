@@ -41,4 +41,13 @@ describe('style customization', () => {
         box.appendChild(select);
         expect(createSelect3(select).wrap.getAttribute('dir')).toBe('rtl');
     });
+
+    it('applies a theme preset class from the theme option', () => {
+        expect(mount({ theme: 'bootstrap5' }).wrap.classList.contains('s3--theme-bootstrap5')).toBe(true);
+        expect(mount({ theme: 'bootstrap4' }).wrap.classList.contains('s3--theme-bootstrap4')).toBe(true);
+    });
+
+    it('adds no theme class by default', () => {
+        expect(mount().wrap.className).not.toContain('s3--theme-');
+    });
 });

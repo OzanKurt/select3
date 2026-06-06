@@ -180,6 +180,7 @@ export class Select3 {
                 options.rtl ??
                 (select.closest('[dir="rtl"]') !== null ||
                     (typeof document !== 'undefined' && document.dir === 'rtl')),
+            theme: options.theme ?? null,
             size: options.size ?? 'md',
             templates: options.templates ?? {},
             tokenSeparators: options.tokenSeparators ?? [],
@@ -426,6 +427,7 @@ export class Select3 {
         addClasses(this.search, cn.search);
         if (this.config.rtl) this.wrap.setAttribute('dir', 'rtl');
         if (this.config.size !== 'md') this.wrap.classList.add(`s3--${this.config.size}`);
+        if (this.config.theme) this.wrap.classList.add(`s3--theme-${this.config.theme}`);
 
         this.wrap.append(this.control, this.dropdown);
         this.select.after(this.wrap);

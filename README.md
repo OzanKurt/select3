@@ -94,7 +94,7 @@ createSelect3(el, { locale: tr });                 // or per-instance (wins)
 
 - CSS variables (`--color-*`, `--select3-dropdown-z`) — override on `.s3` or a parent.
 - `classNames: { wrap, control, dropdown, option, tag, search }` to inject your own classes.
-- Presets: `import '@ozankurt/select3/themes/bootstrap5'` or `/themes/tailwind`.
+- Theme presets: load one CSS file (`import '@ozankurt/select3/themes/bootstrap5'`; also `bootstrap4`, `tailwind`), then apply it per instance with `{ theme: 'bootstrap5' }` (adds `s3--theme-bootstrap5`).
 - `size: 'sm' | 'md' | 'lg'`, and `rtl: true` (auto-detected from `[dir=rtl]`).
 
 ## Modal compatibility

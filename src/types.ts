@@ -126,6 +126,12 @@ export interface Select3Options {
     locale?: Partial<Locale>;
     classNames?: ClassNames;
     rtl?: boolean;
+    /**
+     * Apply a shipped theme preset by name (adds `s3--theme-<name>` to the wrap).
+     * Load the matching CSS once, e.g. import '@ozankurt/select3/themes/bootstrap5'.
+     * Built-in presets: 'bootstrap4', 'bootstrap5', 'tailwind'.
+     */
+    theme?: string | null;
     size?: 'sm' | 'md' | 'lg';
     templates?: Select3Templates;
     // Virtual scroll (P8): window large lists to a handful of rendered rows.
