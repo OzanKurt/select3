@@ -14,7 +14,16 @@
  * option labels can't inject markup.
  */
 
-import type { Select3Options, Select3Config, Item, AddOptionInput, RenderContext } from '../types';
+import type {
+    Select3Options,
+    Select3Config,
+    Item,
+    AddOptionInput,
+    RenderContext,
+    PluginFactory,
+    Select3Plugin,
+} from '../types';
+import { getPlugin } from '../plugins/registry';
 import { Emitter } from './emitter';
 import type { Handler } from './emitter';
 import { fold } from '../search/diacritics';
@@ -92,6 +101,7 @@ export class Select3 {
     private _portalParent: HTMLElement | null = null;
     private _reposition: () => void;
     private _okSnapshot: string[] | null = null;
+    private _plugins: Select3Plugin[] = [];
 
     // Visual nodes (assigned in _build, before first use).
     wrap!: HTMLDivElement;
@@ -210,6 +220,23 @@ export class Select3 {
         if (this.config.ajax) {
             this._ajax = this._buildAjax(this.config.ajax);
             if (this.config.preload === true) this._ajax.search('');
+        }
+
+        // Plugins: instantiate each factory (inline, named, or { name, options })
+        // against this instance. A returned object with destroy() is torn down later.
+        for (const entry of options.plugins ?? []) {
+            let factory: PluginFactory | undefined;
+            let opts: Record<string, unknown> | undefined;
+            if (typeof entry === 'function') {
+                factory = entry;
+            } else if (typeof entry === 'string') {
+                factory = getPlugin(entry);
+            } else {
+                factory = getPlugin(entry.name);
+                opts = entry.options;
+            }
+            const created = factory?.(this, opts);
+            if (created) this._plugins.push(created);
         }
     }
 
@@ -1182,6 +1209,8 @@ export class Select3 {
         this.select.tabIndex = 0;
         if (this._ariaRequired) this.select.required = true;
         delete this.select._s3;
+        this._plugins.forEach((p) => p.destroy?.());
+        this._plugins = [];
         this._emitter.clear();
     }
 }

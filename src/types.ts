@@ -14,6 +14,18 @@ export interface ClassNames {
     search?: string;
 }
 
+/** A live plugin instance; the host only calls destroy() on teardown. */
+export interface Select3Plugin {
+    destroy?(): void;
+}
+
+/**
+ * Wires behavior to an instance using its public API and events. `instance` is
+ * the Select3 instance (typed as `any` here to avoid a types<->core import cycle;
+ * plugin authors import the `Select3` type for their own parameter typing).
+ */
+export type PluginFactory = (instance: any, options?: Record<string, unknown>) => Select3Plugin | void;
+
 /** Passed to every template slot; `escape` HTML-escapes interpolated strings. */
 export interface RenderContext {
     escape: (s: string) => string;
@@ -116,11 +128,13 @@ export interface Select3Options {
     rtl?: boolean;
     size?: 'sm' | 'md' | 'lg';
     templates?: Select3Templates;
+    // Plugins (P9).
+    plugins?: Array<string | PluginFactory | { name: string; options?: Record<string, unknown> }>;
 }
 
 /** Resolved, fully-populated config held on the instance. */
 export type Select3Config = Required<
-    Omit<Select3Options, 'ajax' | 'maxItems' | 'i18n' | 'locale' | 'createFilter'>
+    Omit<Select3Options, 'ajax' | 'maxItems' | 'i18n' | 'locale' | 'createFilter' | 'plugins'>
 > & {
     ajax: string | null;
     maxItems: number | null;
