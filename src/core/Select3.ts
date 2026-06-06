@@ -14,7 +14,7 @@
  * option labels can't inject markup.
  */
 
-import type { Select3Options, Select3Config, Item, AddOptionInput } from '../types';
+import type { Select3Options, Select3Config, Item, AddOptionInput, RenderContext } from '../types';
 import { Emitter } from './emitter';
 import type { Handler } from './emitter';
 import { fold } from '../search/diacritics';
@@ -49,6 +49,13 @@ const iconEl = (className: string): HTMLElement => {
 const addClasses = (node: HTMLElement, classes?: string): void => {
     if (classes) node.classList.add(...classes.split(/\s+/).filter(Boolean));
 };
+
+/** HTML-escape a string, for templates that assemble markup strings themselves. */
+const escape = (s: string): string =>
+    s.replace(
+        /[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
+    );
 
 export class Select3 {
     select: HTMLSelectElement;
@@ -197,7 +204,12 @@ export class Select3 {
             processResults: this.config.processResults,
             queryParam: this.config.queryParam,
             pageParam: this.config.pageParam,
-            onLoading: () => this._renderMessage(this.config.loadingText),
+            onLoading: () =>
+                this._renderMessage(
+                    this.config.templates.loading
+                        ? this._slotNode(this.config.templates.loading(this._ctx()))
+                        : this.config.loadingText,
+                ),
             onResults: (rows, meta) => this._onRemoteResults(rows, meta),
             onError: () => this._renderMessage('Could not load results.'),
         });
@@ -346,6 +358,7 @@ export class Select3 {
         addClasses(this.listbox, cn.listbox);
         addClasses(this.search, cn.search);
         if (this.config.rtl) this.wrap.setAttribute('dir', 'rtl');
+        if (this.config.size !== 'md') this.wrap.classList.add(`s3--${this.config.size}`);
 
         this.wrap.append(this.control, this.dropdown);
         this.select.after(this.wrap);
@@ -645,18 +658,26 @@ export class Select3 {
                 // Past the threshold, collapse the tags into an "N selected" caption.
                 const allSelected = total > 0 && selected.length >= total;
                 const caption = el('span', 's3__caption');
-                caption.textContent =
-                    this.config.captionPrefix +
-                    (allSelected
-                        ? this.config.captionFormatAllSelected(selected.length)
-                        : this.config.captionFormat(selected.length));
+                const capTpl = this.config.templates.caption;
+                if (capTpl) {
+                    caption.append(this._slotNode(capTpl(selected.length, total, this._ctx())));
+                } else {
+                    caption.textContent =
+                        this.config.captionPrefix +
+                        (allSelected
+                            ? this.config.captionFormatAllSelected(selected.length)
+                            : this.config.captionFormat(selected.length));
+                }
                 this.display.append(caption);
             } else {
                 selected.forEach((item) => this.display.append(this._tagEl(item)));
             }
         } else {
             const single = el('span', 's3__single');
-            single.textContent = selected[0]?.label ?? '';
+            const item = selected[0];
+            const itemTpl = this.config.templates.item;
+            if (item && itemTpl) single.append(this._slotNode(itemTpl(item, this._ctx())));
+            else single.textContent = item?.label ?? '';
             this.display.append(single);
         }
 
@@ -676,8 +697,14 @@ export class Select3 {
 
     _tagEl(item: Item): HTMLElement {
         const tag = el('span', 's3__tag');
-        const text = el('span');
-        text.textContent = item.label;
+        const text = el('span', 's3__tag-label');
+        const itemTpl = this.config.templates.item;
+        if (itemTpl) {
+            text.append(this._slotNode(itemTpl(item, this._ctx())));
+        } else {
+            if (item.data?.icon) text.append(iconEl(`${item.data.icon} s3__tag-icon`));
+            text.append(document.createTextNode(item.label));
+        }
         const remove = el('button', 's3__tag-remove');
         remove.type = 'button';
         remove.dataset.value = item.value;
@@ -700,11 +727,60 @@ export class Select3 {
         this._ajax?.schedule(query);
     }
 
-    _renderMessage(text: string): void {
+    _renderMessage(content: string | Node): void {
         this.listbox.replaceChildren();
         const m = el('div', 's3__empty');
-        m.textContent = text;
+        if (typeof content === 'string') m.textContent = content;
+        else m.append(content);
         this.listbox.append(m);
+    }
+
+    private _ctx(): RenderContext {
+        return { escape };
+    }
+
+    /** A template result becomes a Node; a string is inserted as safe text. */
+    private _slotNode(result: string | Node): Node {
+        return typeof result === 'string' ? document.createTextNode(result) : result;
+    }
+
+    /** Rich (or templated) content for one dropdown option. */
+    private _optionContent(item: Item, rawQuery: string): Node {
+        const tpl = this.config.templates.option;
+        if (tpl) return this._slotNode(tpl(item, this._ctx()));
+
+        const data = item.data ?? {};
+        const frag = document.createDocumentFragment();
+        if (data.image) {
+            const img = el('img', 's3__image');
+            img.src = data.image;
+            img.alt = '';
+            frag.append(img);
+        } else if (data.icon) {
+            frag.append(iconEl(`${data.icon} s3__icon`));
+        }
+
+        const main = el('span', 's3__option-main');
+        const label = el('span', 's3__label');
+        if (this.config.highlight && rawQuery) {
+            highlight(item.label, rawQuery).forEach((n) => label.appendChild(n));
+        } else {
+            label.textContent = item.label;
+        }
+        main.append(label);
+        if (data.description) {
+            const desc = el('span', 's3__desc');
+            desc.textContent = data.description;
+            main.append(desc);
+        }
+        frag.append(main);
+
+        if (data.badge) {
+            const badge = el('span', 's3__badge');
+            badge.textContent = data.badge;
+            frag.append(badge);
+        }
+        return frag;
     }
 
     _renderOptions(): void {
@@ -742,11 +818,14 @@ export class Select3 {
             !all.some((i) => fold(i.label) === query);
 
         if (!this.matches.length && !canCreate) {
-            this._renderMessage(
-                this.config.ajax && this.search.value.trim().length < this.config.minChars
-                    ? 'Type to search…'
-                    : this.config.noResults,
-            );
+            const typeToSearch = this.config.ajax && this.search.value.trim().length < this.config.minChars;
+            if (typeToSearch) {
+                this._renderMessage('Type to search…');
+            } else if (this.config.templates.noResults) {
+                this._renderMessage(this._slotNode(this.config.templates.noResults(rawQuery, this._ctx())));
+            } else {
+                this._renderMessage(this.config.noResults);
+            }
             return;
         }
 
@@ -781,7 +860,9 @@ export class Select3 {
         this.matches.forEach((item, idx) => {
             if (item.group && item.group !== lastGroup) {
                 const header = el('div', 's3__group');
-                header.textContent = item.group;
+                const groupTpl = this.config.templates.optgroupHeader;
+                if (groupTpl) header.append(this._slotNode(groupTpl(item.group, this._ctx())));
+                else header.textContent = item.group;
                 this.listbox.append(header);
             }
             lastGroup = item.group;
@@ -800,13 +881,7 @@ export class Select3 {
                 option.append(box);
             }
 
-            const label = el('span');
-            if (this.config.highlight && rawQuery) {
-                highlight(item.label, rawQuery).forEach((n) => label.appendChild(n));
-            } else {
-                label.textContent = item.label;
-            }
-            option.append(label);
+            option.append(this._optionContent(item, rawQuery));
             if (item.selected && !checkboxMode) option.append(iconEl('fa-solid fa-check s3__check'));
 
             option.addEventListener('mouseenter', () => {
@@ -822,7 +897,10 @@ export class Select3 {
 
         if (canCreate) {
             const create = el('div', 's3__option s3__create');
-            create.textContent = this.config.createText(this.search.value.trim());
+            const q = this.search.value.trim();
+            const createTpl = this.config.templates.create;
+            if (createTpl) create.append(this._slotNode(createTpl(q, this._ctx())));
+            else create.textContent = this.config.createText(q);
             create.addEventListener('click', () => this.createTag(this.search.value));
             this.listbox.append(create);
         }
@@ -844,7 +922,9 @@ export class Select3 {
         // Remote pagination: a sentinel row that scrolling into loads the next page.
         if (this.config.ajax && this._hasMore) {
             const loadMore = el('div', 's3__more s3__loadmore');
-            loadMore.textContent = this.config.loadingMoreText;
+            const moreTpl = this.config.templates.loadingMore;
+            if (moreTpl) loadMore.append(this._slotNode(moreTpl(this._ctx())));
+            else loadMore.textContent = this.config.loadingMoreText;
             this.listbox.append(loadMore);
         }
 
