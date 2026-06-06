@@ -112,6 +112,7 @@ export class Select3 {
     private _virtual = false;
     private _virtualRender: (() => void) | null = null;
     private _vRaf = 0;
+    private _vRows: Array<{ group: string } | { index: number }> = [];
     private _native = false;
     private _onNativeChange: (() => void) | null = null;
 
@@ -965,31 +966,55 @@ export class Select3 {
 
     /**
      * Render only the visible window of a large list, with spacer divs above and
-     * below so the scrollbar stays proportional. Groups / select-all / create are
-     * intentionally not shown in virtual mode (it targets large flat lists).
+     * below so the scrollbar stays proportional. Optgroup headers are flattened
+     * into the row list so groups survive virtualization (select-all / create are
+     * still omitted in virtual mode).
      */
     private _renderVirtual(matched: Item[], rawQuery: string): void {
         this.matches = matched;
         this._virtual = true;
         if (!matched.length) {
             this._virtualRender = null;
+            this._vRows = [];
             this._renderMessage(this.config.noResults);
             return;
         }
         const itemH = this.config.itemHeight;
         const checkboxMode = this.multiple && this.config.checkboxes;
+
+        // Flatten to display rows, inserting a header whenever the group changes.
+        const rows: Array<{ group: string } | { index: number }> = [];
+        let lastGroup: string | null = null;
+        matched.forEach((item, index) => {
+            if (item.group && item.group !== lastGroup) rows.push({ group: item.group });
+            lastGroup = item.group;
+            rows.push({ index });
+        });
+        this._vRows = rows;
+
         this._virtualRender = (): void => {
-            const win = computeWindow(this.listbox.scrollTop, this.listbox.clientHeight || 240, itemH, matched.length);
+            const win = computeWindow(this.listbox.scrollTop, this.listbox.clientHeight || 240, itemH, rows.length);
             this.listbox.replaceChildren();
             const top = el('div', 's3__vspace');
             top.style.height = `${win.padTop}px`;
             this.listbox.append(top);
             for (let i = win.start; i < win.end; i++) {
-                const item = matched[i];
-                if (!item) continue;
-                const option = this._buildOption(item, i, rawQuery, checkboxMode);
-                option.style.height = `${itemH}px`;
-                this.listbox.append(option);
+                const row = rows[i];
+                if (!row) continue;
+                if ('group' in row) {
+                    const header = el('div', 's3__group');
+                    const tpl = this.config.templates.optgroupHeader;
+                    if (tpl) header.append(this._slotNode(tpl(row.group, this._ctx())));
+                    else header.textContent = row.group;
+                    header.style.height = `${itemH}px`;
+                    this.listbox.append(header);
+                } else {
+                    const item = matched[row.index];
+                    if (!item) continue;
+                    const option = this._buildOption(item, row.index, rawQuery, checkboxMode);
+                    option.style.height = `${itemH}px`;
+                    this.listbox.append(option);
+                }
             }
             const bottom = el('div', 's3__vspace');
             bottom.style.height = `${win.padBottom}px`;
@@ -1019,7 +1044,10 @@ export class Select3 {
             const scored = all
                 .map((item, order) => ({ item, order, score: scoreItem(item, rawQuery, fields, this.config.fuzzy) }))
                 .filter((x) => x.score > 0);
-            if (this.config.sort) {
+            const sorter = this.config.sort;
+            if (typeof sorter === 'function') {
+                scored.sort((a, b) => sorter(a.item, b.item));
+            } else if (sorter) {
                 scored.sort((a, b) => b.score - a.score || a.order - b.order);
             }
             matched = scored.map((x) => x.item);
@@ -1160,9 +1188,11 @@ export class Select3 {
             }
             this.activeIndex = index;
             // Keep the active row in view, then re-window around the new position.
+            // Use the option's row position (headers shift it) for the scroll math.
             const itemH = this.config.itemHeight;
             const vh = this.listbox.clientHeight || 240;
-            const top = index * itemH;
+            const rowPos = this._vRows.findIndex((r) => 'index' in r && r.index === index);
+            const top = (rowPos < 0 ? index : rowPos) * itemH;
             if (top < this.listbox.scrollTop) this.listbox.scrollTop = top;
             else if (top + itemH > this.listbox.scrollTop + vh) this.listbox.scrollTop = top + itemH - vh;
             this._virtualRender?.();

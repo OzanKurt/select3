@@ -74,6 +74,18 @@ describe('search by optgroup', () => {
     });
 });
 
+describe('custom sort', () => {
+    beforeEach(() => document.body.replaceChildren());
+
+    it('orders matched results with a custom comparator', () => {
+        const s = mountFlat(['Banana', 'Apple', 'Avocado'], {
+            sort: (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label),
+        });
+        type(s, 'a'); // all three match; comparator forces alphabetical
+        expect(rendered(s)).toEqual(['Apple', 'Avocado', 'Banana']);
+    });
+});
+
 describe('display vs search independence', () => {
     beforeEach(() => document.body.replaceChildren());
 

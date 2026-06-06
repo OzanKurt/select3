@@ -59,4 +59,25 @@ describe('virtual scroll integration', () => {
         (s3.wrap.querySelector('.s3__option') as HTMLElement).click();
         expect((document.querySelector('select') as HTMLSelectElement).value).toBe('0');
     });
+
+    it('keeps optgroup headers in virtual mode', () => {
+        const select = document.createElement('select');
+        const a = document.createElement('optgroup');
+        a.label = 'Group A';
+        for (let i = 0; i < 50; i++) a.appendChild(new Option(`A${i}`, `a${i}`));
+        const b = document.createElement('optgroup');
+        b.label = 'Group B';
+        for (let i = 0; i < 50; i++) b.appendChild(new Option(`B${i}`, `b${i}`));
+        select.append(a, b);
+        document.body.appendChild(select);
+
+        const s3 = createSelect3(select, { virtualScroll: true, itemHeight: 36 });
+        s3.open();
+
+        const headers = [...s3.wrap.querySelectorAll('.s3__group')].map((h) => h.textContent?.trim());
+        expect(headers).toContain('Group A'); // header survives virtualization
+        const rendered = s3.wrap.querySelectorAll('.s3__option').length;
+        expect(rendered).toBeGreaterThan(0);
+        expect(rendered).toBeLessThan(60); // still windowed, not all 100
+    });
 });

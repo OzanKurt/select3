@@ -115,7 +115,7 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 | `searchField` | `string[]` | `['label']` | Fields to match (`'label'`, `'group'`, or any `data-*` key). |
 | `fuzzy` | `boolean` | `false` | Also match an in-order subsequence (typo/abbreviation tolerant). |
 | `searchGroups` | `boolean` | `false` | Include the optgroup label in the haystack. |
-| `sort` | `boolean` | `true` | Rank results by relevance score. |
+| `sort` | `boolean \| (a,b) => number` | `true` | Rank by relevance, keep original order (`false`), or a custom comparator. |
 | `highlight` | `boolean` | `true` | Wrap matched text in `<mark>`. |
 | `minResultsForSearch` | `number` | `0` | Hide the search box below N options. |
 | `maxInputLength` | `number` | `0` | Max chars in the search input (0 = no limit). |

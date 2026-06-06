@@ -87,7 +87,8 @@ export interface Select3Options {
     maxReachedText?: (max: number) => string;
     // Search (P2).
     searchField?: string[];
-    sort?: boolean;
+    /** true = rank by relevance, false = original order, or a custom comparator. */
+    sort?: boolean | ((a: Item, b: Item) => number);
     highlight?: boolean;
     /** Also match the query as an in-order subsequence (typo/abbreviation tolerant). */
     fuzzy?: boolean;
