@@ -124,6 +124,31 @@ describe('Select3 AJAX integration', () => {
         expect(labels).toContain('Berlin');
     });
 
+    it('carries rich per-row data and groups remote options', async () => {
+        const select = document.createElement('select');
+        select.add(new Option('', ''));
+        document.body.appendChild(select);
+        const transport: Transport = async () => [
+            { id: 'a', text: 'Ann', icon: 'fa fa-user', group: 'Admins' },
+            { id: 'b', text: 'Bob', group: 'Users' },
+        ];
+        const s = createSelect3(select, { ajax: '/u', minChars: 1, debounce: 0, transport });
+        s.open();
+        s.search.value = 'x';
+        s.search.dispatchEvent(new Event('input'));
+        await settle();
+
+        // Native <optgroup>s created for the remote groups, rich data on the option.
+        const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
+        expect(groups).toEqual(expect.arrayContaining(['Admins', 'Users']));
+        expect([...select.options].find((o) => o.value === 'a')?.dataset.icon).toBe('fa fa-user');
+
+        // Rendered dropdown shows the group headers and the icon.
+        const headers = [...s.wrap.querySelectorAll('.s3__group')].map((h) => h.textContent?.trim());
+        expect(headers).toEqual(expect.arrayContaining(['Admins', 'Users']));
+        expect(s.wrap.querySelector('.s3__option .s3__icon')).not.toBeNull();
+    });
+
     it('preload:true loads the first page on init', async () => {
         const select = document.createElement('select');
         select.add(new Option('', ''));

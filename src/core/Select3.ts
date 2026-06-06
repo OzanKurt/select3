@@ -151,6 +151,8 @@ export class Select3 {
             searchField: options.searchField ?? ['label'],
             sort: options.sort ?? true,
             highlight: options.highlight ?? true,
+            fuzzy: options.fuzzy ?? false,
+            searchGroups: options.searchGroups ?? false,
             minResultsForSearch: options.minResultsForSearch ?? 0,
             maxInputLength: options.maxInputLength ?? 0,
             appendTo: options.appendTo ?? 'auto',
@@ -287,10 +289,11 @@ export class Select3 {
 
         if (!meta.append) {
             // Drop previously-injected, now-unselected remote options absent from
-            // the new set so stale rows don't linger.
+            // the new set so stale rows don't linger, then prune emptied groups.
             [...this.select.options].forEach((o) => {
                 if (o.dataset.s3remote === '1' && !o.selected && !fresh.has(o.value)) o.remove();
             });
+            this._pruneRemoteGroups();
             this.remoteValues = incoming;
         } else {
             this.remoteValues = [...this.remoteValues, ...incoming];
@@ -298,15 +301,44 @@ export class Select3 {
 
         const existing = new Set([...this.select.options].map((o) => o.value));
         rows.forEach((r) => {
-            if (!existing.has(r.value)) {
-                const option = new Option(r.label, r.value);
-                option.dataset.s3remote = '1';
-                this.select.add(option);
-                existing.add(r.value);
+            if (existing.has(r.value)) return;
+            const option = new Option(r.label, r.value);
+            option.dataset.s3remote = '1';
+            // Carry rich per-row data so remote options render icon/image/etc.
+            for (const key of ['icon', 'image', 'description', 'badge'] as const) {
+                const v = r[key];
+                if (typeof v === 'string' && v !== '') option.dataset[key] = v;
             }
+            // Group remote options into an <optgroup> when the row names one.
+            const group = typeof r.group === 'string' ? r.group : '';
+            if (group) {
+                this._remoteOptgroup(group).appendChild(option);
+            } else {
+                this.select.add(option);
+            }
+            existing.add(r.value);
         });
 
         if (this.isOpen) this._renderOptions();
+    }
+
+    /** Find or create the remote <optgroup> with the given label. */
+    private _remoteOptgroup(label: string): HTMLOptGroupElement {
+        const found = [...this.select.querySelectorAll('optgroup')].find((g) => g.label === label);
+        if (found) return found as HTMLOptGroupElement;
+        const og = document.createElement('optgroup');
+        og.label = label;
+        og.dataset.s3remote = '1';
+        this.select.add(og);
+        return og;
+    }
+
+    /** Remove remote-created <optgroup>s that no longer hold any options. */
+    private _pruneRemoteGroups(): void {
+        this.select.querySelectorAll('optgroup').forEach((g) => {
+            const og = g as HTMLOptGroupElement;
+            if (og.dataset.s3remote === '1' && og.children.length === 0) og.remove();
+        });
     }
 
     _items(): Item[] {
@@ -979,9 +1011,13 @@ export class Select3 {
             matched = all;
         } else {
             // Score every option, drop non-matches, then rank by relevance with
-            // original order as the stable tie-break.
+            // original order as the stable tie-break. searchGroups widens the
+            // haystack to the optgroup label; fuzzy adds subsequence matching.
+            const fields = this.config.searchGroups
+                ? [...this.config.searchField, 'group']
+                : this.config.searchField;
             const scored = all
-                .map((item, order) => ({ item, order, score: scoreItem(item, rawQuery, this.config.searchField) }))
+                .map((item, order) => ({ item, order, score: scoreItem(item, rawQuery, fields, this.config.fuzzy) }))
                 .filter((x) => x.score > 0);
             if (this.config.sort) {
                 scored.sort((a, b) => b.score - a.score || a.order - b.order);
@@ -1333,6 +1369,7 @@ export class Select3 {
         [...this.select.options].forEach((o) => {
             if (o.dataset.s3remote === '1') o.remove();
         });
+        this._pruneRemoteGroups();
         if (this._onNativeChange) {
             this.select.removeEventListener('change', this._onNativeChange);
             this._onNativeChange = null;

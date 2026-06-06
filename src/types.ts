@@ -89,6 +89,10 @@ export interface Select3Options {
     searchField?: string[];
     sort?: boolean;
     highlight?: boolean;
+    /** Also match the query as an in-order subsequence (typo/abbreviation tolerant). */
+    fuzzy?: boolean;
+    /** Include each option's optgroup label in the searchable haystack. */
+    searchGroups?: boolean;
     minResultsForSearch?: number;
     maxInputLength?: number;
     // Positioning & modal compatibility (P3).

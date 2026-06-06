@@ -9,7 +9,7 @@ Written in TypeScript, shipped as tree-shakeable ESM with full type definitions.
 ## Features
 
 - Single and multiple selection (reads `<select>` / `<select multiple>`)
-- Relevance-scoring search with diacritic folding, multi-field search, and match highlighting
+- Relevance-scoring search: diacritic folding, fuzzy (subsequence) matching (`fuzzy`), multi-field + optgroup-label search (`searchField`, `searchGroups`), match highlighting, and a search field independent of the displayed label
 - Tagging: create options on the fly, `tokenSeparators`, `createFilter`, `persist`, `addPrecedence`
 - AJAX remote options: request cancellation, caching, debounce, infinite-scroll pagination, `preload`
 - SumoSelect UX: Select-All (with indeterminate), Clear-All, OK/Cancel staging, "N selected" caption, checkbox options
@@ -109,7 +109,8 @@ clip it. Override with `appendTo: 'body' | element` / `dropdownParent`.
 Endpoint receives `?q=` (and `?page=` for pagination); return
 `[{ value, label }]` or `{ results, hasMore }` (map other shapes via
 `processResults`). In-flight requests abort on change; responses are cached and
-discarded if stale.
+discarded if stale. Rows may also carry `icon` / `image` / `description` / `badge`
+and a `group` (remote options are placed into the matching `<optgroup>`).
 
 ## Virtual scroll & native mobile
 
