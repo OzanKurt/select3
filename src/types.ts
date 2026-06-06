@@ -131,13 +131,18 @@ export interface Select3Options {
     // Virtual scroll (P8): window large lists to a handful of rendered rows.
     virtualScroll?: boolean;
     itemHeight?: number;
+    // Native fallback (P8): keep the OS <select> picker on touch devices.
+    nativeOnMobile?: boolean | 'auto';
     // Plugins (P9).
     plugins?: Array<string | PluginFactory | { name: string; options?: Record<string, unknown> }>;
 }
 
 /** Resolved, fully-populated config held on the instance. */
 export type Select3Config = Required<
-    Omit<Select3Options, 'ajax' | 'maxItems' | 'i18n' | 'locale' | 'createFilter' | 'plugins'>
+    Omit<
+        Select3Options,
+        'ajax' | 'maxItems' | 'i18n' | 'locale' | 'createFilter' | 'plugins' | 'nativeOnMobile'
+    >
 > & {
     ajax: string | null;
     maxItems: number | null;

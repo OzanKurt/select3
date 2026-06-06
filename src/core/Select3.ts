@@ -70,6 +70,12 @@ const escape = (s: string): string =>
 /** Escape a string for safe use inside a RegExp character class. */
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** True on touch/small-viewport devices where the OS <select> picker is better. */
+const prefersNativePicker = (): boolean => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    return window.matchMedia('(pointer: coarse)').matches && window.innerWidth <= 640;
+};
+
 /** Normalize the createFilter option (RegExp | string | fn) into a predicate. */
 const normalizeCreateFilter = (
     cf: RegExp | string | ((input: string) => boolean) | undefined,
@@ -106,6 +112,8 @@ export class Select3 {
     private _virtual = false;
     private _virtualRender: (() => void) | null = null;
     private _vRaf = 0;
+    private _native = false;
+    private _onNativeChange: (() => void) | null = null;
 
     // Visual nodes (assigned in _build, before first use).
     wrap!: HTMLDivElement;
@@ -219,6 +227,9 @@ export class Select3 {
             this._ariaRequired = true;
         }
 
+        const nom = options.nativeOnMobile ?? 'auto';
+        this._native = nom === true || (nom === 'auto' && prefersNativePicker());
+
         this._build();
         this._bind();
         this.sync();
@@ -317,9 +328,15 @@ export class Select3 {
     }
 
     _build(): void {
-        this.select.classList.add('s3-native');
-        this.select.tabIndex = -1;
-        this.select.setAttribute('aria-hidden', 'true');
+        if (this._native) {
+            // Native mode: keep the real <select> interactive (it overlays the
+            // styled control transparently), so a tap opens the OS picker.
+            this.select.classList.add('s3-native-overlay');
+        } else {
+            this.select.classList.add('s3-native');
+            this.select.tabIndex = -1;
+            this.select.setAttribute('aria-hidden', 'true');
+        }
 
         this.wrap = el('div', `s3 ${this.multiple ? 's3--multi' : 's3--single'}`);
 
@@ -413,6 +430,17 @@ export class Select3 {
         this.wrap.append(this.control, this.dropdown);
         this.select.after(this.wrap);
         if (this.select.disabled) this.wrap.classList.add('s3--disabled');
+
+        if (this._native) {
+            this.wrap.classList.add('s3--native');
+            // Move the transparent native <select> on top of the styled control.
+            this.wrap.appendChild(this.select);
+            this._onNativeChange = () => {
+                this.sync();
+                this._emitter.emit('change', { value: this.getValue() });
+            };
+            this.select.addEventListener('change', this._onNativeChange);
+        }
     }
 
     _bind(): void {
@@ -494,6 +522,7 @@ export class Select3 {
     }
 
     open(): void {
+        if (this._native) return; // the OS picker handles opening in native mode
         if (this.select.disabled || this._locked || this.isOpen) return;
         if (!this._allows('beforeOpen')) return;
         this.isOpen = true;
@@ -1302,8 +1331,15 @@ export class Select3 {
         [...this.select.options].forEach((o) => {
             if (o.dataset.s3remote === '1') o.remove();
         });
+        if (this._onNativeChange) {
+            this.select.removeEventListener('change', this._onNativeChange);
+            this._onNativeChange = null;
+        }
+        // Restore the native <select> beside the wrap before discarding it (in
+        // native mode the select lives inside the wrap), so the element survives.
+        this.wrap.before(this.select);
         this.wrap.remove();
-        this.select.classList.remove('s3-native');
+        this.select.classList.remove('s3-native', 's3-native-overlay');
         this.select.removeAttribute('aria-hidden');
         this.select.tabIndex = 0;
         if (this._ariaRequired) this.select.required = true;
