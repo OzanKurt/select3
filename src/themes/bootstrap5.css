@@ -1,0 +1,22 @@
+/*
+ * @ozankurt/select3 — Bootstrap 5 preset.
+ * Maps Select3's design tokens onto Bootstrap's CSS variables so the control
+ * matches a Bootstrap 5 theme (including its dark mode via data-bs-theme).
+ * Import after the base styles:
+ *   import '@ozankurt/select3/css';
+ *   import '@ozankurt/select3/themes/bootstrap5';
+ */
+.s3 {
+    --color-surface: var(--bs-body-bg, #fff);
+    --color-surface-muted: var(--bs-tertiary-bg, #f8f9fa);
+    --color-content: var(--bs-body-color, #212529);
+    --color-muted: var(--bs-secondary-color, #6c757d);
+    --color-border: var(--bs-border-color, #dee2e6);
+    --color-primary-500: var(--bs-primary, #0d6efd);
+    --color-primary-600: var(--bs-primary, #0b5ed7);
+    --color-primary-700: var(--bs-primary, #0a58ca);
+}
+.s3 .s3__control,
+.s3 .s3__search {
+    border-radius: var(--bs-border-radius, 0.375rem);
+}

@@ -298,3 +298,72 @@
     background-color: var(--color-primary-600, #2563eb);
     border-color: var(--color-primary-600, #2563eb);
 }
+
+/* Rich option content (P6): icon / image / description / badge. */
+.s3__option-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+.s3__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.s3__desc {
+    overflow: hidden;
+    font-size: 0.75rem;
+    color: var(--color-muted, #6b7280);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.s3__icon {
+    flex: none;
+    width: 1.1rem;
+    text-align: center;
+    color: var(--color-muted, #6b7280);
+}
+.s3__image {
+    flex: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    object-fit: cover;
+    border-radius: 0.25rem;
+}
+.s3__badge {
+    flex: none;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-primary-700, #1d4ed8);
+    background-color: color-mix(in srgb, var(--color-primary-500, #3b82f6) 16%, transparent);
+    border-radius: 999px;
+}
+.s3__tag-icon {
+    font-size: 0.75rem;
+}
+
+/* Density (P6): size variants applied as s3--sm / s3--lg on the wrap. */
+.s3--sm {
+    font-size: 0.8rem;
+}
+.s3--sm .s3__control {
+    min-height: 2rem;
+    padding: 0.15rem 0.4rem;
+}
+.s3--lg {
+    font-size: 1rem;
+}
+.s3--lg .s3__control {
+    min-height: 2.9rem;
+    padding: 0.45rem 0.65rem;
+}
+
+/* RTL (P6): the wrap carries dir="rtl", so flex + text already follow the
+   reading direction; these just nudge a few explicitly-aligned bits. */
+.s3[dir='rtl'] .s3__single,
+.s3[dir='rtl'] .s3__search,
+.s3[dir='rtl'] .s3__clearall {
+    text-align: right;
+}
