@@ -21,6 +21,8 @@ import { fold } from '../search/diacritics';
 import { scoreItem } from '../search/sifter';
 import { highlight } from '../search/highlight';
 import { resolveDropdownParent, computeFlip, placeDropdown, resetDropdown } from '../render/position';
+import { AjaxAdapter, defaultTransport, defaultProcessResults } from '../data/ajax-adapter';
+import type { RemoteRow } from '../types';
 
 declare global {
     interface HTMLSelectElement {
@@ -52,9 +54,9 @@ export class Select3 {
     matches: Item[] = [];
     remoteValues: string[] = [];
 
-    private _debounce: ReturnType<typeof setTimeout> | null = null;
-    private _abort: AbortController | null = null;
-    private _remoteToken = 0;
+    private _ajax: AjaxAdapter | null = null;
+    private _hasMore = false;
+    private _preloaded = false;
     private _onDocClick: (e: MouseEvent) => void;
     private _labelId: string | null = null;
     private _ariaLabel: string | null;
@@ -104,6 +106,13 @@ export class Select3 {
             appendTo: options.appendTo ?? 'auto',
             dropdownGap: options.dropdownGap ?? 4,
             dropdownZ: options.dropdownZ ?? 1100,
+            debounce: options.debounce ?? 250,
+            preload: options.preload ?? false,
+            transport: options.transport ?? defaultTransport,
+            processResults: options.processResults ?? defaultProcessResults,
+            queryParam: options.queryParam ?? 'q',
+            pageParam: options.pageParam ?? 'page',
+            loadingMoreText: options.loadingMoreText ?? 'Loading more…',
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -146,6 +155,57 @@ export class Select3 {
         this._build();
         this._bind();
         this.sync();
+
+        if (this.config.ajax) {
+            this._ajax = this._buildAjax(this.config.ajax);
+            if (this.config.preload === true) this._ajax.search('');
+        }
+    }
+
+    private _buildAjax(url: string): AjaxAdapter {
+        return new AjaxAdapter({
+            url,
+            debounce: this.config.debounce,
+            transport: this.config.transport,
+            processResults: this.config.processResults,
+            queryParam: this.config.queryParam,
+            pageParam: this.config.pageParam,
+            onLoading: () => this._renderMessage(this.config.loadingText),
+            onResults: (rows, meta) => this._onRemoteResults(rows, meta),
+            onError: () => this._renderMessage('Could not load results.'),
+        });
+    }
+
+    private _onRemoteResults(
+        rows: RemoteRow[],
+        meta: { append: boolean; hasMore: boolean; query: string },
+    ): void {
+        this._hasMore = meta.hasMore;
+        const incoming = rows.map((r) => r.value);
+        const fresh = new Set(incoming);
+
+        if (!meta.append) {
+            // Drop previously-injected, now-unselected remote options absent from
+            // the new set so stale rows don't linger.
+            [...this.select.options].forEach((o) => {
+                if (o.dataset.s3remote === '1' && !o.selected && !fresh.has(o.value)) o.remove();
+            });
+            this.remoteValues = incoming;
+        } else {
+            this.remoteValues = [...this.remoteValues, ...incoming];
+        }
+
+        const existing = new Set([...this.select.options].map((o) => o.value));
+        rows.forEach((r) => {
+            if (!existing.has(r.value)) {
+                const option = new Option(r.label, r.value);
+                option.dataset.s3remote = '1';
+                this.select.add(option);
+                existing.add(r.value);
+            }
+        });
+
+        if (this.isOpen) this._renderOptions();
     }
 
     _items(): Item[] {
@@ -252,8 +312,14 @@ export class Select3 {
         this.search.addEventListener('input', () => {
             this.activeIndex = 0;
             this._emitter.emit('type', { query: this.search.value });
-            if (this.config.ajax) this._scheduleRemote();
+            if (this.config.ajax) this._remoteInput();
             else this._renderOptions();
+        });
+        // Infinite scroll: near the bottom, ask the adapter for the next page.
+        this.listbox.addEventListener('scroll', () => {
+            if (!this.config.ajax || !this._hasMore || !this._ajax) return;
+            const lb = this.listbox;
+            if (lb.scrollTop + lb.clientHeight >= lb.scrollHeight - 24) this._ajax.more();
         });
         this.search.addEventListener('keydown', (e: KeyboardEvent) => this._onSearchKey(e));
         if (this.config.openOnFocus) {
@@ -315,6 +381,10 @@ export class Select3 {
         this._searchWrap.style.display = showSearch ? '' : 'none';
         if (showSearch) setTimeout(() => this.search.focus(), 0);
         if (this.config.hidePlaceholder) this.sync();
+        if (this.config.ajax && this.config.preload === 'focus' && !this._preloaded) {
+            this._preloaded = true;
+            this._ajax?.search('');
+        }
         this._emitter.emit('open');
     }
 
@@ -484,74 +554,17 @@ export class Select3 {
         return tag;
     }
 
-    /** Debounced remote search (AJAX mode). */
-    _scheduleRemote(): void {
-        clearTimeout(this._debounce ?? undefined);
-        if (this.search.value.trim().length < this.config.minChars) {
-            // Abort any pending request so a late response can't repopulate.
-            if (this._abort) this._abort.abort();
-            this._abort = null;
+    /** Handle typing in AJAX mode: gate on minChars, else schedule via the adapter. */
+    private _remoteInput(): void {
+        const query = this.search.value.trim();
+        if (query.length < this.config.minChars) {
+            this._ajax?.cancel();
             this.remoteValues = [];
+            this._hasMore = false;
             this._renderOptions();
             return;
         }
-        this._renderMessage(this.config.loadingText);
-        this._debounce = setTimeout(() => this._remoteSearch(this.search.value.trim()), 250);
-    }
-
-    async _remoteSearch(query: string): Promise<void> {
-        const ajax = this.config.ajax;
-        if (!ajax) return;
-        // Cancel the previous in-flight request and stamp this one so we can
-        // discard responses that resolve out of order or after close.
-        if (this._abort) this._abort.abort();
-        const controller = new AbortController();
-        this._abort = controller;
-        const token = ++this._remoteToken;
-
-        try {
-            const sep = ajax.includes('?') ? '&' : '?';
-            const res = await fetch(`${ajax}${sep}q=${encodeURIComponent(query)}`, {
-                headers: { Accept: 'application/json' },
-                signal: controller.signal,
-            });
-            if (!res.ok) throw new Error(String(res.status));
-            const data = await res.json();
-
-            // Bail if a newer request superseded us or the dropdown closed.
-            if (token !== this._remoteToken || !this.isOpen) return;
-
-            const rows: Array<Record<string, unknown>> = Array.isArray(data)
-                ? data
-                : (data.results ?? data.data ?? []);
-            const newValues = rows.map((r) => String(r.value ?? r.id));
-            const fresh = new Set(newValues);
-
-            // Prune previously-injected remote options that are no longer in the
-            // result set and not currently selected, so stale rows don't linger.
-            [...this.select.options].forEach((o) => {
-                if (o.dataset.s3remote === '1' && !o.selected && !fresh.has(o.value)) {
-                    o.remove();
-                }
-            });
-
-            const existing = new Set([...this.select.options].map((o) => o.value));
-            rows.forEach((r) => {
-                const value = String(r.value ?? r.id);
-                if (!existing.has(value)) {
-                    const option = new Option(String(r.label ?? r.text ?? value), value);
-                    option.dataset.s3remote = '1';
-                    this.select.add(option);
-                    existing.add(value);
-                }
-            });
-            this.remoteValues = newValues;
-            this._renderOptions();
-        } catch (e) {
-            if (e instanceof DOMException && e.name === 'AbortError') return;
-            if (token !== this._remoteToken || !this.isOpen) return;
-            this._renderMessage('Could not load results.');
-        }
+        this._ajax?.schedule(query);
     }
 
     _renderMessage(text: string): void {
@@ -659,6 +672,13 @@ export class Select3 {
             const hint = el('div', 's3__more s3__max');
             hint.textContent = this.config.maxReachedText(this.config.maxItems);
             this.listbox.append(hint);
+        }
+
+        // Remote pagination: a sentinel row that scrolling into loads the next page.
+        if (this.config.ajax && this._hasMore) {
+            const loadMore = el('div', 's3__more s3__loadmore');
+            loadMore.textContent = this.config.loadingMoreText;
+            this.listbox.append(loadMore);
         }
 
         // Make sure the resting highlight is on a selectable row, never a
@@ -854,9 +874,7 @@ export class Select3 {
         if (this.isOpen) this.close();
         this._emitter.emit('destroy');
         document.removeEventListener('click', this._onDocClick);
-        clearTimeout(this._debounce ?? undefined);
-        if (this._abort) this._abort.abort();
-        this._abort = null;
+        this._ajax?.destroy();
         // Restore the original <select> option set by dropping every option we
         // injected from AJAX, regardless of selected state.
         [...this.select.options].forEach((o) => {

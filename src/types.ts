@@ -1,6 +1,25 @@
 /** Where the dropdown is attached. 'auto' portals into a modal ancestor if any. */
 export type AppendTo = 'auto' | 'self' | 'body' | HTMLElement;
 
+/** A normalized remote row. `value`/`label` are required; extra fields are kept. */
+export interface RemoteRow {
+    value: string;
+    label: string;
+    [key: string]: unknown;
+}
+
+/** Result of mapping a raw server response into rows + a "more pages" flag. */
+export interface ProcessedResults {
+    results: RemoteRow[];
+    hasMore: boolean;
+}
+
+/** Swap out the network layer (default uses fetch). */
+export type Transport = (url: string, init: { signal: AbortSignal }) => Promise<unknown>;
+
+/** Map a raw response (per page) into normalized results. */
+export type ProcessResults = (raw: unknown, page: number) => ProcessedResults;
+
 /** Public option bag accepted by createSelect3 / new Select3. All optional. */
 export interface Select3Options {
     placeholder?: string;
@@ -31,6 +50,14 @@ export interface Select3Options {
     appendTo?: AppendTo;
     dropdownGap?: number;
     dropdownZ?: number;
+    // Data / AJAX (P4).
+    debounce?: number;
+    preload?: boolean | 'focus';
+    transport?: Transport;
+    processResults?: ProcessResults;
+    queryParam?: string;
+    pageParam?: string;
+    loadingMoreText?: string;
 }
 
 /** Resolved, fully-populated config held on the instance. */
