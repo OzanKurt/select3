@@ -1,16 +1,21 @@
 {
     "name": "@ozankurt/select3",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Modern, dependency-free <select> enhancer: single/multi, scoring search, tagging, AJAX and a WAI-ARIA combobox. The successor to Select2 / Tom Select / SumoSelect.",
     "type": "module",
-    "main": "./src/index.js",
-    "module": "./src/index.js",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "exports": {
-        ".": "./src/index.js",
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
         "./css": "./src/select3.css"
     },
     "files": [
-        "src",
+        "dist",
+        "src/select3.css",
         "README.md"
     ],
     "sideEffects": [
@@ -39,7 +44,15 @@
         "url": "https://github.com/OzanKurt/select3/issues"
     },
     "scripts": {
-        "test": "echo \"select3 tests live in the consuming app's Vitest suite\" && exit 0"
+        "build": "tsup",
+        "test": "vitest run",
+        "prepublishOnly": "npm run build"
+    },
+    "devDependencies": {
+        "tsup": "^8.0.0",
+        "typescript": "^5.5.0",
+        "vitest": "^4.0.0",
+        "jsdom": "^25.0.0"
     },
     "license": "MIT",
     "author": "Ozan Kurt"
