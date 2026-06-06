@@ -385,3 +385,31 @@
     opacity: 0;
     z-index: 3;
 }
+
+/* UX pack: loading spinner (shown via .s3--loading) + result-count footer. */
+.s3__spinner {
+    display: none;
+    place-items: center;
+    flex: none;
+    width: 1.4rem;
+    color: var(--color-muted, #6b7280);
+}
+.s3--loading .s3__spinner {
+    display: inline-grid;
+    animation: s3-spin 0.7s linear infinite;
+}
+.s3--loading .s3__arrow {
+    display: none;
+}
+@keyframes s3-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.s3__count {
+    padding: 0.4rem 0.55rem;
+    font-size: 0.7rem;
+    text-align: right;
+    color: var(--color-muted, #6b7280);
+    border-top: 1px solid var(--color-border, #e5e7eb);
+}

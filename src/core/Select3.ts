@@ -22,6 +22,7 @@ import type {
     RenderContext,
     PluginFactory,
     Select3Plugin,
+    CreatedOption,
 } from '../types';
 import { getPlugin } from '../plugins/registry';
 import { Emitter } from './emitter';
@@ -166,6 +167,7 @@ export class Select3 {
             queryParam: options.queryParam ?? 'q',
             pageParam: options.pageParam ?? 'page',
             loadingMoreText: options.loadingMoreText ?? locale.loadingMoreText,
+            cacheTTL: options.cacheTTL ?? 0,
             selectAll: options.selectAll ?? false,
             selectAllText: options.selectAllText ?? locale.selectAllText,
             clearAllText: options.clearAllText ?? locale.clearAllText,
@@ -186,10 +188,21 @@ export class Select3 {
             theme: options.theme ?? null,
             size: options.size ?? 'md',
             templates: options.templates ?? {},
+            showCount: options.showCount ?? false,
+            countText: options.countText ?? ((n: number) => `${n} result${n === 1 ? '' : 's'}`),
             tokenSeparators: options.tokenSeparators ?? [],
             createFilter: normalizeCreateFilter(options.createFilter),
             persist: options.persist ?? true,
             addPrecedence: options.addPrecedence ?? false,
+            create: options.create ?? null,
+            recent: options.recent
+                ? {
+                      key:
+                          (options.recent === true ? undefined : options.recent.key) ??
+                          `s3-recent-${select.id || select.name || 'select3'}`,
+                      max: (options.recent === true ? undefined : options.recent.max) ?? 5,
+                  }
+                : null,
             virtualScroll: options.virtualScroll ?? false,
             itemHeight: options.itemHeight ?? 36,
         };
@@ -269,14 +282,23 @@ export class Select3 {
             processResults: this.config.processResults,
             queryParam: this.config.queryParam,
             pageParam: this.config.pageParam,
-            onLoading: () =>
+            cacheTTL: this.config.cacheTTL,
+            onLoading: () => {
+                this.wrap.classList.add('s3--loading');
                 this._renderMessage(
                     this.config.templates.loading
                         ? this._slotNode(this.config.templates.loading(this._ctx()))
                         : this.config.loadingText,
-                ),
-            onResults: (rows, meta) => this._onRemoteResults(rows, meta),
-            onError: () => this._renderMessage('Could not load results.'),
+                );
+            },
+            onResults: (rows, meta) => {
+                this.wrap.classList.remove('s3--loading');
+                this._onRemoteResults(rows, meta);
+            },
+            onError: () => {
+                this.wrap.classList.remove('s3--loading');
+                this._renderMessage('Could not load results.');
+            },
         });
     }
 
@@ -394,6 +416,11 @@ export class Select3 {
         this.arrow = el('span', 's3__arrow');
         this.arrow.append(iconEl('fa-solid fa-chevron-down'));
         this.control.append(this.arrow);
+
+        // Loading spinner — revealed by .s3--loading during AJAX requests.
+        const spinner = el('span', 's3__spinner');
+        spinner.append(iconEl('fa-solid fa-spinner'));
+        this.control.append(spinner);
 
         this.dropdown = el('div', 's3__dropdown');
         const searchWrap = el('div', 's3__search-wrap');
@@ -650,6 +677,7 @@ export class Select3 {
         }
 
         this._emitter.emit('select', { value });
+        if (this.config.recent) this._recordRecent(value);
         this._changed();
         this.sync();
 
@@ -783,11 +811,83 @@ export class Select3 {
             this.choose(existing.value);
             return;
         }
+
+        // Custom (optionally async) creation hook — e.g. persist the tag server-side.
+        if (this.config.create) {
+            const result = this.config.create(text);
+            if (result instanceof Promise) {
+                this.wrap.classList.add('s3--loading');
+                if (this.isOpen) this._renderMessage(this.config.loadingText);
+                result
+                    .then((row) => {
+                        this.wrap.classList.remove('s3--loading');
+                        if (row) this._addCreated(row);
+                        else if (this.isOpen) this._renderOptions();
+                    })
+                    .catch(() => {
+                        this.wrap.classList.remove('s3--loading');
+                        if (this.isOpen) this._renderOptions();
+                    });
+                return;
+            }
+            if (result) this._addCreated(result);
+            return;
+        }
+
         const option = new Option(text, text);
         // Mark user-created options so persist:false can drop them on deselect.
         option.dataset.s3created = '1';
         this.select.add(option);
         this.choose(text);
+    }
+
+    /** Add an option from a (custom/async) create result, then select it. */
+    private _addCreated(row: CreatedOption): void {
+        const value = String(row.value);
+        if ([...this.select.options].some((o) => o.value === value)) {
+            this.choose(value);
+            return;
+        }
+        const option = new Option(String(row.label ?? value), value);
+        option.dataset.s3created = '1';
+        for (const key of ['icon', 'image', 'description', 'badge'] as const) {
+            const v = row[key];
+            if (typeof v === 'string' && v !== '') option.dataset[key] = v;
+        }
+        this.select.add(option);
+        this.choose(value);
+    }
+
+    /** Recently-chosen values (most recent first), read from localStorage. */
+    private _getRecent(): string[] {
+        const cfg = this.config.recent;
+        if (!cfg) return [];
+        try {
+            const raw = localStorage.getItem(cfg.key);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr.filter((v): v is string => typeof v === 'string') : [];
+        } catch {
+            return [];
+        }
+    }
+
+    private _recordRecent(value: string): void {
+        const cfg = this.config.recent;
+        if (!cfg || value === '') return;
+        try {
+            const list = [value, ...this._getRecent().filter((v) => v !== value)].slice(0, cfg.max);
+            localStorage.setItem(cfg.key, JSON.stringify(list));
+        } catch {
+            /* storage unavailable — recents are best-effort */
+        }
+    }
+
+    /** Reorder so recently-chosen items lead (recency order); the rest unchanged. */
+    private _applyRecent(items: Item[]): Item[] {
+        const recent = this._getRecent();
+        if (!recent.length) return items;
+        const rank = new Map(recent.map((v, i) => [v, i] as const));
+        return [...items].sort((a, b) => (rank.get(a.value) ?? Infinity) - (rank.get(b.value) ?? Infinity));
     }
 
     _emit(): void {
@@ -1053,6 +1153,11 @@ export class Select3 {
             matched = scored.map((x) => x.item);
         }
 
+        // Recent: float recently-chosen values to the top (flat lists, empty query).
+        if (!rawQuery && this.config.recent && !all.some((i) => i.group)) {
+            matched = this._applyRecent(matched);
+        }
+
         // Virtual scroll: window a large (non-AJAX) list to a few rendered rows.
         this._virtual = false;
         if (this.config.virtualScroll && !this.config.ajax) {
@@ -1155,6 +1260,13 @@ export class Select3 {
             if (moreTpl) loadMore.append(this._slotNode(moreTpl(this._ctx())));
             else loadMore.textContent = this.config.loadingMoreText;
             this.listbox.append(loadMore);
+        }
+
+        // Optional result-count summary footer.
+        if (this.config.showCount) {
+            const count = el('div', 's3__count');
+            count.textContent = this.config.countText(this.matches.length);
+            this.listbox.append(count);
         }
 
         // With addPrecedence, the create row (rendered right after the matches)

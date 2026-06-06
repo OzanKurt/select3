@@ -108,6 +108,8 @@ export interface Select3Options {
     queryParam?: string;
     pageParam?: string;
     loadingMoreText?: string;
+    /** Cache TTL (ms) for AJAX results; >0 serves stale results then revalidates. 0 = forever. */
+    cacheTTL?: number;
     // SumoSelect UX (P5).
     selectAll?: boolean;
     selectAllText?: string;
@@ -126,6 +128,8 @@ export interface Select3Options {
     createFilter?: RegExp | string | ((input: string) => boolean);
     persist?: boolean;
     addPrecedence?: boolean;
+    /** Custom (optionally async) tag creation; return an option, or null/false to reject. */
+    create?: (label: string) => CreatedOption | null | false | Promise<CreatedOption | null | false>;
     // Localization & style customization (P6).
     i18n?: Partial<Locale>;
     locale?: Partial<Locale>;
@@ -139,6 +143,12 @@ export interface Select3Options {
     theme?: string | null;
     size?: 'sm' | 'md' | 'lg';
     templates?: Select3Templates;
+    // UX pack: recent values, a result-count footer, and a loading spinner.
+    /** Remember recently-chosen values (localStorage) and float them to the top. */
+    recent?: boolean | { key?: string; max?: number };
+    /** Show a "N results" summary row at the foot of the dropdown. */
+    showCount?: boolean;
+    countText?: (n: number) => string;
     // Virtual scroll (P8): window large lists to a handful of rendered rows.
     virtualScroll?: boolean;
     itemHeight?: number;
@@ -152,13 +162,23 @@ export interface Select3Options {
 export type Select3Config = Required<
     Omit<
         Select3Options,
-        'ajax' | 'maxItems' | 'i18n' | 'locale' | 'createFilter' | 'plugins' | 'nativeOnMobile'
+        | 'ajax'
+        | 'maxItems'
+        | 'i18n'
+        | 'locale'
+        | 'createFilter'
+        | 'plugins'
+        | 'nativeOnMobile'
+        | 'create'
+        | 'recent'
     >
 > & {
     ajax: string | null;
     maxItems: number | null;
     /** Normalized from RegExp/string/function into a single predicate. */
     createFilter: (input: string) => boolean;
+    create: ((label: string) => CreatedOption | null | false | Promise<CreatedOption | null | false>) | null;
+    recent: { key: string; max: number } | null;
 };
 
 /** A normalized view of a native <option>. */
@@ -179,4 +199,11 @@ export interface AddOptionInput {
     label: string;
     selected?: boolean;
     disabled?: boolean;
+}
+
+/** Returned by the async/custom `create` hook; merged into a new <option>. */
+export interface CreatedOption {
+    value: string;
+    label?: string;
+    [key: string]: unknown;
 }

@@ -84,6 +84,32 @@ describe('AjaxAdapter', () => {
         expect(a.hasMore).toBe(false);
     });
 
+    it('serves a stale cache entry then revalidates (SWR)', async () => {
+        let calls = 0;
+        const a = new AjaxAdapter({
+            url: '/s',
+            debounce: 0,
+            cacheTTL: 1,
+            transport: async () => {
+                calls += 1;
+                return [{ id: 1, text: 'A' }];
+            },
+            processResults: defaultProcessResults,
+            queryParam: 'q',
+            pageParam: 'page',
+            onLoading: () => {},
+            onResults: () => {},
+            onError: () => {},
+        });
+        a.search('x');
+        await settle();
+        expect(calls).toBe(1);
+        await new Promise((r) => setTimeout(r, 5)); // exceed the 1ms TTL
+        a.search('x');
+        await settle();
+        expect(calls).toBe(2); // cached served immediately, then revalidated
+    });
+
     it('drops a stale response when superseded', async () => {
         let resolveFirst!: (v: unknown) => void;
         const first = new Promise((r) => (resolveFirst = r));

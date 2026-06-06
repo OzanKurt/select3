@@ -131,6 +131,7 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 | `persist` | `boolean` | `true` | Keep created options after deselect. |
 | `addPrecedence` | `boolean` | `false` | Enter creates the tag instead of picking a match. |
 | `createText` | `(q) => string` | locale | Label for the "create" row. |
+| `create` | `(label) => option \| null \| false \| Promise<…>` | — | Custom/async tag creation (e.g. persist server-side, then select). |
 
 ### Data / AJAX
 
@@ -143,6 +144,7 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 | `queryParam` / `pageParam` | `string` | `'q'` / `'page'` | Request param names. |
 | `processResults` | `(raw, page) => {results, hasMore}` | default | Map any server shape. |
 | `transport` | `(url, {signal}) => Promise` | `fetch` | Swap the network layer. |
+| `cacheTTL` | `number` | `0` | ms before cached results are served stale and revalidated (SWR). 0 = forever. |
 
 ### Multi-select UX
 
@@ -170,6 +172,8 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 | `virtualScroll` | `boolean` | `false` | Window large lists. |
 | `itemHeight` | `number` | `36` | Row height for virtual scroll. |
 | `nativeOnMobile` | `boolean \| 'auto'` | `'auto'` | Use the OS picker on touch devices. |
+| `recent` | `boolean \| { key?, max? }` | — | Float recently-chosen values to the top (localStorage-backed). |
+| `showCount` / `countText` | `boolean` / `(n) => string` | `false` | Result-count footer row. |
 | `i18n` / `locale` | `Partial<Locale>` | — | Per-instance translations. |
 | `plugins` | `(string \| factory \| {name, options})[]` | `[]` | Attach plugins. |
 
