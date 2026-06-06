@@ -413,3 +413,18 @@
     color: var(--color-muted, #6b7280);
     border-top: 1px solid var(--color-border, #e5e7eb);
 }
+
+/* Tree / hierarchical mode: a disclosure caret + indented rows. */
+.s3__tree-row {
+    justify-content: flex-start;
+    gap: 0.4rem;
+}
+.s3__caret {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 1rem;
+    font-size: 0.65rem;
+    color: var(--color-muted, #6b7280);
+    cursor: pointer;
+}

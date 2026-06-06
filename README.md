@@ -171,6 +171,8 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 | `dropdownGap` / `dropdownZ` | `number` | `4` / `1100` | Gap + z-index of the portaled dropdown. |
 | `virtualScroll` | `boolean` | `false` | Window large lists. |
 | `itemHeight` | `number` | `36` | Row height for virtual scroll. |
+| `tree` | `boolean` | `false` | Hierarchical mode (options linked by `data-parent`). |
+| `treeIndent` | `number` | `18` | Indent (px) per tree level. |
 | `nativeOnMobile` | `boolean \| 'auto'` | `'auto'` | Use the OS picker on touch devices. |
 | `recent` | `boolean \| { key?, max? }` | — | Float recently-chosen values to the top (localStorage-backed). |
 | `showCount` / `countText` | `boolean` / `(n) => string` | `false` | Result-count footer row. |
@@ -262,6 +264,30 @@ createSelect3(el, {
   maxItems: 5,
 });
 ```
+
+## Tree / hierarchical select
+
+Link options with `data-parent` (the parent option's value) and select3 renders a
+collapsible tree. In multi-select, checking a branch toggles all its descendant
+leaves (partial selection = indeterminate); a search reveals matching leaves with
+their ancestors. Arrow Right/Left expand/collapse the focused branch.
+
+```html
+<select multiple data-select3>
+  <option value="electronics">Electronics</option>
+  <option value="phones" data-parent="electronics">Phones</option>
+  <option value="iphone" data-parent="phones">iPhone</option>
+  <option value="pixel" data-parent="phones">Pixel</option>
+  <option value="clothing">Clothing</option>
+  <option value="shirt" data-parent="clothing">Shirt</option>
+</select>
+```
+```js
+createSelect3(el, { tree: true });
+```
+
+The native `<select>` stays flat (leaves are the form value); the hierarchy is
+reconstructed from `data-parent`.
 
 ## Theming & styling
 

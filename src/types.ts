@@ -149,6 +149,10 @@ export interface Select3Options {
     /** Show a "N results" summary row at the foot of the dropdown. */
     showCount?: boolean;
     countText?: (n: number) => string;
+    // Tree / hierarchical mode: options linked by data-parent render as a
+    // collapsible tree; in multi-select, a branch toggles its descendant leaves.
+    tree?: boolean;
+    treeIndent?: number;
     // Virtual scroll (P8): window large lists to a handful of rendered rows.
     virtualScroll?: boolean;
     itemHeight?: number;

@@ -32,6 +32,8 @@ import { scoreItem } from '../search/sifter';
 import { highlight } from '../search/highlight';
 import { resolveDropdownParent, computeFlip, placeDropdown, resetDropdown } from '../render/position';
 import { computeWindow } from '../render/virtual';
+import { buildTree, leavesOf, walk } from '../tree/tree';
+import type { TreeNode } from '../tree/tree';
 import { AjaxAdapter, defaultTransport, defaultProcessResults } from '../data/ajax-adapter';
 import { resolveLocale } from '../i18n/registry';
 import type { RemoteRow } from '../types';
@@ -114,6 +116,8 @@ export class Select3 {
     private _virtualRender: (() => void) | null = null;
     private _vRaf = 0;
     private _vRows: Array<{ group: string } | { index: number }> = [];
+    private _expanded = new Set<string>();
+    private _vNodes: TreeNode[] = [];
     private _native = false;
     private _onNativeChange: (() => void) | null = null;
 
@@ -203,6 +207,8 @@ export class Select3 {
                       max: (options.recent === true ? undefined : options.recent.max) ?? 5,
                   }
                 : null,
+            tree: options.tree ?? false,
+            treeIndent: options.treeIndent ?? 18,
             virtualScroll: options.virtualScroll ?? false,
             itemHeight: options.itemHeight ?? 36,
         };
@@ -572,6 +578,20 @@ export class Select3 {
             // Select the active option without preventing default, so focus
             // still advances to the next field afterward.
             this._chooseActive();
+        } else if (this.config.tree && e.key === 'ArrowRight') {
+            e.preventDefault();
+            const node = this._vNodes[this.activeIndex];
+            if (node && node.children.length && !this._expanded.has(node.value)) {
+                this._expanded.add(node.value);
+                this._renderOptions();
+            }
+        } else if (this.config.tree && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const node = this._vNodes[this.activeIndex];
+            if (node && node.children.length && this._expanded.has(node.value)) {
+                this._expanded.delete(node.value);
+                this._renderOptions();
+            }
         } else if (e.key === 'Backspace' && this.search.value === '' && this.multiple) {
             const selected = this._selected();
             const last = selected[selected.length - 1];
@@ -1124,9 +1144,166 @@ export class Select3 {
         this._virtualRender();
     }
 
+    // ----- Tree / hierarchical mode --------------------------------------
+
+    private _renderTree(rawQuery: string): void {
+        this._virtual = false;
+        const items = this._items().filter((i) => !i.placeholder);
+        const roots = buildTree(items);
+
+        // Search: keep nodes that match, plus their ancestors and descendants.
+        let visibleSet: Set<string> | null = null;
+        if (rawQuery) {
+            const fields = this.config.searchGroups
+                ? [...this.config.searchField, 'group']
+                : this.config.searchField;
+            const byValue = new Map<string, TreeNode>();
+            walk(roots, (n) => byValue.set(n.value, n));
+            visibleSet = new Set<string>();
+            items.forEach((i) => {
+                if (scoreItem(i, rawQuery, fields, this.config.fuzzy) <= 0) return;
+                const node = byValue.get(i.value);
+                for (let a: TreeNode | null = node ?? null; a; a = a.parent) visibleSet!.add(a.value);
+                if (node) walk(node.children, (c) => visibleSet!.add(c.value));
+            });
+        }
+
+        this.listbox.replaceChildren();
+        const indent = this.config.treeIndent;
+        const visibleNodes: TreeNode[] = [];
+        const renderLevel = (nodes: TreeNode[]): void => {
+            for (const node of nodes) {
+                if (visibleSet && !visibleSet.has(node.value)) continue;
+                const expanded = !!rawQuery || this._expanded.has(node.value);
+                const idx = visibleNodes.length;
+                visibleNodes.push(node);
+                this.listbox.append(this._treeRow(node, idx, expanded, rawQuery, indent));
+                if (node.children.length && expanded) renderLevel(node.children);
+            }
+        };
+        renderLevel(roots);
+
+        this._vNodes = visibleNodes;
+        this.matches = visibleNodes.map((n) => n.item);
+
+        if (!visibleNodes.length) {
+            this._renderMessage(this.config.noResults);
+            return;
+        }
+        if (this.config.showCount) {
+            const count = el('div', 's3__count');
+            count.textContent = this.config.countText(visibleNodes.length);
+            this.listbox.append(count);
+        }
+        this._highlight();
+    }
+
+    private _treeRow(node: TreeNode, idx: number, expanded: boolean, rawQuery: string, indent: number): HTMLDivElement {
+        const item = node.item;
+        const isBranch = node.children.length > 0;
+        const row = el('div', 's3__option s3__tree-row');
+        row.id = `${this.uid}-opt-${idx}`;
+        row.dataset.index = String(idx);
+        row.setAttribute('role', 'option');
+        row.style.paddingLeft = `${8 + node.level * indent}px`;
+        row.classList.toggle('is-disabled', item.disabled);
+
+        const caret = el('span', 's3__caret');
+        if (isBranch) {
+            caret.append(iconEl(expanded ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'));
+            caret.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._toggleExpand(node.value);
+            });
+            row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+        row.append(caret);
+
+        let selected = false;
+        if (this.multiple) {
+            const box = el('span', 's3__checkbox');
+            const state = isBranch ? this._branchState(node) : this._isSelected(item.value) ? 'checked' : 'unchecked';
+            if (state === 'checked') box.classList.add('is-checked');
+            else if (state === 'indeterminate') box.classList.add('is-indeterminate');
+            row.append(box);
+            selected = state === 'checked';
+        } else {
+            selected = this._isSelected(item.value);
+        }
+        row.setAttribute('aria-selected', selected ? 'true' : 'false');
+        row.classList.toggle('is-selected', selected);
+
+        const label = el('span', 's3__label');
+        if (this.config.highlight && rawQuery) {
+            highlight(item.label, rawQuery).forEach((n) => label.appendChild(n));
+        } else {
+            label.textContent = item.label;
+        }
+        row.append(label);
+        if (!this.multiple && selected) row.append(iconEl('fa-solid fa-check s3__check'));
+
+        row.addEventListener('mouseenter', () => {
+            this.activeIndex = idx;
+            this._highlight();
+        });
+        row.addEventListener('click', () => {
+            if (item.disabled) return;
+            this._treeToggle(node);
+        });
+        return row;
+    }
+
+    private _toggleExpand(value: string): void {
+        if (this._expanded.has(value)) this._expanded.delete(value);
+        else this._expanded.add(value);
+        this._renderOptions();
+    }
+
+    private _isSelected(value: string): boolean {
+        return [...this.select.options].some((o) => o.value === value && o.selected);
+    }
+
+    private _branchState(node: TreeNode): 'checked' | 'indeterminate' | 'unchecked' {
+        const leaves = leavesOf(node);
+        const selected = leaves.filter((l) => this._isSelected(l.value)).length;
+        if (selected === 0) return 'unchecked';
+        if (selected === leaves.length) return 'checked';
+        return 'indeterminate';
+    }
+
+    /** Toggle a tree node: leaf = (de)select; branch (multi) = toggle its leaves. */
+    private _treeToggle(node: TreeNode): void {
+        if (this._locked) return;
+        if (!this.multiple) {
+            this.choose(node.value);
+            return;
+        }
+        if (node.children.length) {
+            const leaves = leavesOf(node).filter((l) => !l.item.disabled);
+            const allSelected = leaves.length > 0 && leaves.every((l) => this._isSelected(l.value));
+            const options = [...this.select.options];
+            leaves.forEach((l) => {
+                const o = options.find((opt) => opt.value === l.value);
+                if (o) o.selected = !allSelected;
+            });
+            this._emit();
+            this._emitter.emit('change', { value: this.getValue() });
+            this.sync();
+            this._renderOptions();
+        } else {
+            this._isSelected(node.value) ? this.deselect(node.value) : this.choose(node.value);
+        }
+    }
+
     _renderOptions(): void {
         const rawQuery = this.search.value.trim();
         const query = fold(this.search.value);
+
+        if (this.config.tree) {
+            this._renderTree(rawQuery);
+            return;
+        }
+
         const all = this._items().filter((i) => !i.placeholder);
 
         let matched: Item[];
@@ -1356,6 +1533,11 @@ export class Select3 {
             if (item && !item.disabled) {
                 item.selected && this.multiple ? this.deselect(item.value) : this.choose(item.value);
             }
+            return;
+        }
+        if (this.config.tree) {
+            const node = this._vNodes[this.activeIndex];
+            if (node && !node.item.disabled) this._treeToggle(node);
             return;
         }
         const active = this.listbox.querySelectorAll('.s3__option')[this.activeIndex];
