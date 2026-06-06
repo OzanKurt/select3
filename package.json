@@ -16,12 +16,27 @@
         "./i18n/*": {
             "types": "./dist/i18n/*.d.ts",
             "import": "./dist/i18n/*.js"
-        }
+        },
+        "./plugins/drag-drop": {
+            "types": "./dist/plugins/drag-drop.d.ts",
+            "import": "./dist/plugins/drag-drop.js"
+        },
+        "./plugins/csv-output": {
+            "types": "./dist/plugins/csv-output.d.ts",
+            "import": "./dist/plugins/csv-output.js"
+        },
+        "./plugins/optgroup-columns": {
+            "types": "./dist/plugins/optgroup-columns.d.ts",
+            "import": "./dist/plugins/optgroup-columns.js"
+        },
+        "./plugins/drag-drop.css": "./src/plugins/drag-drop.css",
+        "./plugins/optgroup-columns.css": "./src/plugins/optgroup-columns.css"
     },
     "files": [
         "dist",
         "src/select3.css",
         "src/themes",
+        "src/plugins",
         "README.md"
     ],
     "sideEffects": [

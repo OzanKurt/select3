@@ -1,0 +1,28 @@
+/**
+ * Styles for the drag-drop plugin.
+ *
+ * Selected tags in a multi-select become draggable handles for reordering.
+ * Import this alongside the plugin when you want the grab cursor + drag feedback:
+ *   import '@ozankurt/select3/plugins/drag-drop.css';
+ */
+
+/* A draggable tag invites grabbing. */
+.s3--multi .s3__tag {
+    cursor: grab;
+}
+
+.s3--multi .s3__tag:active {
+    cursor: grabbing;
+}
+
+/* The tag currently being dragged dims and shows the grabbing cursor so the
+   drop target stands out. */
+.s3__tag.s3__tag--dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Don't let the remove (x) button override the grab affordance on the tag. */
+.s3--multi .s3__tag .s3__tag-remove {
+    cursor: pointer;
+}

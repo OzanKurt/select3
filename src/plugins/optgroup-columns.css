@@ -1,0 +1,25 @@
+/**
+ * Styles for the optgroup-columns plugin.
+ *
+ * When the wrap carries `s3--cols`, the options list becomes a CSS grid with a
+ * column count driven by the `--s3-cols` variable (set inline on the listbox by
+ * the plugin, default 2). Option rows flow into the columns; group headers span
+ * the full width so each group's label sits above its options.
+ */
+.s3--cols .s3__options {
+    display: grid;
+    grid-template-columns: repeat(var(--s3-cols, 2), minmax(0, 1fr));
+}
+
+.s3--cols .s3__group {
+    grid-column: 1 / -1;
+}
+
+/* Full-width affordances inside the grid keep their own row. */
+.s3--cols .s3__selectall,
+.s3--cols .s3__clearall,
+.s3--cols .s3__empty,
+.s3--cols .s3__more,
+.s3--cols .s3__create {
+    grid-column: 1 / -1;
+}
