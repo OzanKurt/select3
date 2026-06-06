@@ -6,35 +6,71 @@
  * WAI-ARIA combobox. The native <select> stays in the DOM as the source of
  * truth and form value, and a `change` event fires on every mutation.
  *
- * Advanced features from select3-plan.md (AJAX, virtual scroll, optgroups,
- * Select-All / OK-Cancel, i18n, RTL) layer on later without changing this API.
+ * Advanced features from the design spec (events bus, rich methods, AJAX
+ * pagination, virtual scroll, SumoSelect UX, i18n, RTL, plugins) layer on in
+ * later phases without changing this API.
  *
  * DOM is built with createElement/textContent only — never innerHTML — so
  * option labels can't inject markup.
  */
 
+import type { Select3Options, Select3Config, Item } from '../types';
+
+declare global {
+    interface HTMLSelectElement {
+        _s3?: Select3;
+    }
+}
+
 let uid = 0;
 
-const el = (tag, className) => {
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): HTMLElementTagNameMap[K] => {
     const node = document.createElement(tag);
     if (className) node.className = className;
     return node;
 };
 
-const iconEl = (className) => {
+const iconEl = (className: string): HTMLElement => {
     const i = document.createElement('i');
     i.className = className;
     return i;
 };
 
-const fold = (s) =>
+const fold = (s: string): string =>
     (s || '')
         .toLowerCase()
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '');
 
 export class Select3 {
-    constructor(select, options = {}) {
+    select: HTMLSelectElement;
+    multiple: boolean;
+    config: Select3Config;
+    uid: string;
+    isOpen = false;
+    activeIndex = 0;
+    matches: Item[] = [];
+    remoteValues: string[] = [];
+
+    private _debounce: ReturnType<typeof setTimeout> | null = null;
+    private _abort: AbortController | null = null;
+    private _remoteToken = 0;
+    private _onDocClick: (e: MouseEvent) => void;
+    private _labelId: string | null = null;
+    private _ariaLabel: string | null;
+    private _ariaRequired = false;
+
+    // Visual nodes (assigned in _build, before first use).
+    wrap!: HTMLDivElement;
+    control!: HTMLDivElement;
+    display!: HTMLDivElement;
+    clear!: HTMLButtonElement;
+    arrow!: HTMLSpanElement;
+    dropdown!: HTMLDivElement;
+    search!: HTMLInputElement;
+    listbox!: HTMLDivElement;
+
+    constructor(select: HTMLSelectElement, options: Select3Options = {}) {
         this.select = select;
         this.multiple = select.multiple;
         this.config = {
@@ -43,23 +79,16 @@ export class Select3 {
             tags: select.hasAttribute('data-tags') || !!options.tags,
             searchable: options.searchable ?? true,
             noResults: options.noResults ?? 'No results',
-            createText: options.createText ?? ((q) => `Create “${q}”`),
+            createText: options.createText ?? ((q: string) => `Create “${q}”`),
             ajax: select.dataset.ajax ?? options.ajax ?? null,
             minChars: options.minChars ?? (select.dataset.ajax || options.ajax ? 1 : 0),
             maxRender: options.maxRender ?? 100,
             loadingText: options.loadingText ?? 'Searching…',
-            moreText: options.moreText ?? ((n) => `${n} more — refine your search`),
+            moreText: options.moreText ?? ((n: number) => `${n} more, refine your search`),
         };
         this.uid = `s3-${++uid}`;
-        this.isOpen = false;
-        this.activeIndex = 0;
-        this.matches = [];
-        this.remoteValues = [];
-        this._debounce = null;
-        this._abort = null;
-        this._remoteToken = 0;
-        this._onDocClick = (e) => {
-            if (!this.wrap.contains(e.target)) this.close();
+        this._onDocClick = (e: MouseEvent) => {
+            if (!this.wrap.contains(e.target as Node)) this.close();
         };
 
         // Resolve the native select's accessible name so the visible widgets
@@ -68,7 +97,6 @@ export class Select3 {
         const label =
             (select.id && document.querySelector(`label[for="${select.id}"]`)) ||
             select.closest('label');
-        this._labelId = null;
         this._ariaLabel = select.getAttribute('aria-label');
         if (label) {
             if (!label.id) label.id = `${this.uid}-label`;
@@ -87,22 +115,25 @@ export class Select3 {
         this.sync();
     }
 
-    _items() {
+    _items(): Item[] {
         return [...this.select.options].map((o) => ({
             value: o.value,
-            label: o.textContent.trim(),
+            label: (o.textContent ?? '').trim(),
             selected: o.selected,
             disabled: o.disabled,
             placeholder: o.value === '',
-            group: o.parentElement?.tagName === 'OPTGROUP' ? o.parentElement.label : null,
+            group:
+                o.parentElement?.tagName === 'OPTGROUP'
+                    ? (o.parentElement as HTMLOptGroupElement).label
+                    : null,
         }));
     }
 
-    _selected() {
+    _selected(): Item[] {
         return this._items().filter((i) => i.selected && !i.placeholder);
     }
 
-    _build() {
+    _build(): void {
         this.select.classList.add('s3-native');
         this.select.tabIndex = -1;
         this.select.setAttribute('aria-hidden', 'true');
@@ -168,9 +199,9 @@ export class Select3 {
         if (this.select.disabled) this.wrap.classList.add('s3--disabled');
     }
 
-    _bind() {
+    _bind(): void {
         this.control.addEventListener('click', () => this.toggle());
-        this.control.addEventListener('keydown', (e) => {
+        this.control.addEventListener('keydown', (e: KeyboardEvent) => {
             if (!this.isOpen && ['Enter', ' ', 'ArrowDown'].includes(e.key)) {
                 e.preventDefault();
                 this.open();
@@ -187,17 +218,17 @@ export class Select3 {
             if (this.config.ajax) this._scheduleRemote();
             else this._renderOptions();
         });
-        this.search.addEventListener('keydown', (e) => this._onSearchKey(e));
+        this.search.addEventListener('keydown', (e: KeyboardEvent) => this._onSearchKey(e));
         this.display.addEventListener('click', (e) => {
-            const remove = e.target.closest('.s3__tag-remove');
+            const remove = (e.target as HTMLElement | null)?.closest<HTMLElement>('.s3__tag-remove');
             if (remove) {
                 e.stopPropagation();
-                this.deselect(remove.dataset.value);
+                this.deselect(remove.dataset.value ?? '');
             }
         });
     }
 
-    _onSearchKey(e) {
+    _onSearchKey(e: KeyboardEvent): void {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             this._move(1);
@@ -213,15 +244,16 @@ export class Select3 {
             this.control.focus();
         } else if (e.key === 'Backspace' && this.search.value === '' && this.multiple) {
             const selected = this._selected();
-            if (selected.length) this.deselect(selected[selected.length - 1].value);
+            const last = selected[selected.length - 1];
+            if (last) this.deselect(last.value);
         }
     }
 
-    toggle() {
+    toggle(): void {
         this.isOpen ? this.close() : this.open();
     }
 
-    open() {
+    open(): void {
         if (this.select.disabled || this.isOpen) return;
         this.isOpen = true;
         this.wrap.classList.add('s3--open');
@@ -233,7 +265,7 @@ export class Select3 {
         if (this.config.searchable) setTimeout(() => this.search.focus(), 0);
     }
 
-    close() {
+    close(): void {
         if (!this.isOpen) return;
         this.isOpen = false;
         this.wrap.classList.remove('s3--open');
@@ -242,7 +274,7 @@ export class Select3 {
         document.removeEventListener('click', this._onDocClick);
     }
 
-    choose(value) {
+    choose(value: string): void {
         const option = [...this.select.options].find((o) => o.value === value);
         if (!option || option.disabled) return;
 
@@ -265,7 +297,7 @@ export class Select3 {
         }
     }
 
-    deselect(value) {
+    deselect(value: string): void {
         const option = [...this.select.options].find((o) => o.value === value);
         if (option) option.selected = false;
         this._emit();
@@ -273,7 +305,7 @@ export class Select3 {
         if (this.isOpen) this._renderOptions();
     }
 
-    clearAll() {
+    clearAll(): void {
         [...this.select.options].forEach((o) => {
             if (o.value !== '') o.selected = false;
         });
@@ -286,14 +318,14 @@ export class Select3 {
         if (this.isOpen) this._renderOptions();
     }
 
-    createTag(label) {
+    createTag(label: string): void {
         const text = label.trim();
         if (!text) return;
         // Use the same folded-label key as canCreate so a tag that already
         // exists (case/diacritic-insensitively) reuses that option's value
         // instead of creating a duplicate.
         const folded = fold(text);
-        const existing = [...this.select.options].find((o) => fold(o.textContent.trim()) === folded);
+        const existing = [...this.select.options].find((o) => fold((o.textContent ?? '').trim()) === folded);
         if (existing) {
             this.choose(existing.value);
             return;
@@ -302,11 +334,11 @@ export class Select3 {
         this.choose(text);
     }
 
-    _emit() {
+    _emit(): void {
         this.select.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    sync() {
+    sync(): void {
         const selected = this._selected();
         this.display.replaceChildren();
 
@@ -316,7 +348,7 @@ export class Select3 {
             selected.forEach((item) => this.display.append(this._tagEl(item)));
         } else {
             const single = el('span', 's3__single');
-            single.textContent = selected[0].label;
+            single.textContent = selected[0]?.label ?? '';
             this.display.append(single);
         }
 
@@ -328,13 +360,13 @@ export class Select3 {
         this.wrap.classList.toggle('s3--has-value', hasValue);
     }
 
-    _placeholderEl() {
+    _placeholderEl(): HTMLElement {
         const span = el('span', 's3__placeholder');
         span.textContent = this.config.placeholder;
         return span;
     }
 
-    _tagEl(item) {
+    _tagEl(item: Item): HTMLElement {
         const tag = el('span', 's3__tag');
         const text = el('span');
         text.textContent = item.label;
@@ -348,8 +380,8 @@ export class Select3 {
     }
 
     /** Debounced remote search (AJAX mode). */
-    _scheduleRemote() {
-        clearTimeout(this._debounce);
+    _scheduleRemote(): void {
+        clearTimeout(this._debounce ?? undefined);
         if (this.search.value.trim().length < this.config.minChars) {
             // Abort any pending request so a late response can't repopulate.
             if (this._abort) this._abort.abort();
@@ -362,7 +394,9 @@ export class Select3 {
         this._debounce = setTimeout(() => this._remoteSearch(this.search.value.trim()), 250);
     }
 
-    async _remoteSearch(query) {
+    async _remoteSearch(query: string): Promise<void> {
+        const ajax = this.config.ajax;
+        if (!ajax) return;
         // Cancel the previous in-flight request and stamp this one so we can
         // discard responses that resolve out of order or after close.
         if (this._abort) this._abort.abort();
@@ -371,18 +405,20 @@ export class Select3 {
         const token = ++this._remoteToken;
 
         try {
-            const sep = this.config.ajax.includes('?') ? '&' : '?';
-            const res = await fetch(`${this.config.ajax}${sep}q=${encodeURIComponent(query)}`, {
+            const sep = ajax.includes('?') ? '&' : '?';
+            const res = await fetch(`${ajax}${sep}q=${encodeURIComponent(query)}`, {
                 headers: { Accept: 'application/json' },
                 signal: controller.signal,
             });
-            if (!res.ok) throw new Error(res.status);
+            if (!res.ok) throw new Error(String(res.status));
             const data = await res.json();
 
             // Bail if a newer request superseded us or the dropdown closed.
             if (token !== this._remoteToken || !this.isOpen) return;
 
-            const rows = Array.isArray(data) ? data : (data.results ?? data.data ?? []);
+            const rows: Array<Record<string, unknown>> = Array.isArray(data)
+                ? data
+                : (data.results ?? data.data ?? []);
             const newValues = rows.map((r) => String(r.value ?? r.id));
             const fresh = new Set(newValues);
 
@@ -407,20 +443,20 @@ export class Select3 {
             this.remoteValues = newValues;
             this._renderOptions();
         } catch (e) {
-            if (e?.name === 'AbortError') return;
+            if (e instanceof DOMException && e.name === 'AbortError') return;
             if (token !== this._remoteToken || !this.isOpen) return;
             this._renderMessage('Could not load results.');
         }
     }
 
-    _renderMessage(text) {
+    _renderMessage(text: string): void {
         this.listbox.replaceChildren();
         const m = el('div', 's3__empty');
         m.textContent = text;
         this.listbox.append(m);
     }
 
-    _renderOptions() {
+    _renderOptions(): void {
         const query = fold(this.search.value);
         const all = this._items().filter((i) => !i.placeholder);
 
@@ -437,7 +473,7 @@ export class Select3 {
         // same folded key createTag() reuses, so the two never disagree.
         const canCreate =
             this.config.tags &&
-            this.search.value.trim() &&
+            !!this.search.value.trim() &&
             !all.some((i) => fold(i.label) === query);
 
         if (!this.matches.length && !canCreate) {
@@ -449,7 +485,7 @@ export class Select3 {
             return;
         }
 
-        let lastGroup = null;
+        let lastGroup: string | null = null;
         this.matches.forEach((item, idx) => {
             if (item.group && item.group !== lastGroup) {
                 const header = el('div', 's3__group');
@@ -499,17 +535,18 @@ export class Select3 {
         const rows = [...this.listbox.querySelectorAll('.s3__option')];
         const current = rows[this.activeIndex];
         if (current && current.classList.contains('is-disabled')) {
-            const next = rows.findIndex((o, i) => i >= this.activeIndex && !o.classList.contains('is-disabled'));
-            this.activeIndex = next === -1
-                ? rows.findIndex((o) => !o.classList.contains('is-disabled'))
-                : next;
+            const next = rows.findIndex(
+                (o, i) => i >= this.activeIndex && !o.classList.contains('is-disabled'),
+            );
+            this.activeIndex =
+                next === -1 ? rows.findIndex((o) => !o.classList.contains('is-disabled')) : next;
             if (this.activeIndex === -1) this.activeIndex = 0;
         }
 
         this._highlight();
     }
 
-    _move(direction) {
+    _move(direction: number): void {
         const options = [...this.listbox.querySelectorAll('.s3__option')];
         const count = options.length;
         if (!count) return;
@@ -519,13 +556,14 @@ export class Select3 {
         let index = this.activeIndex;
         for (let i = 0; i < count; i++) {
             index = (index + direction + count) % count;
-            if (!options[index].classList.contains('is-disabled')) break;
+            const opt = options[index];
+            if (opt && !opt.classList.contains('is-disabled')) break;
         }
         this.activeIndex = index;
         this._highlight();
     }
 
-    _highlight() {
+    _highlight(): void {
         const options = [...this.listbox.querySelectorAll('.s3__option')];
         options.forEach((o, i) => o.classList.toggle('is-active', i === this.activeIndex));
         const active = options[this.activeIndex];
@@ -537,7 +575,7 @@ export class Select3 {
         }
     }
 
-    _chooseActive() {
+    _chooseActive(): void {
         const active = this.listbox.querySelectorAll('.s3__option')[this.activeIndex];
         if (!active) return;
         if (active.classList.contains('s3__create')) {
@@ -550,14 +588,14 @@ export class Select3 {
         }
     }
 
-    refresh() {
+    refresh(): void {
         this.sync();
         if (this.isOpen) this._renderOptions();
     }
 
-    destroy() {
+    destroy(): void {
         document.removeEventListener('click', this._onDocClick);
-        clearTimeout(this._debounce);
+        clearTimeout(this._debounce ?? undefined);
         if (this._abort) this._abort.abort();
         this._abort = null;
         // Restore the original <select> option set by dropping every option we
@@ -574,7 +612,7 @@ export class Select3 {
     }
 }
 
-export function createSelect3(select, options = {}) {
+export function createSelect3(select: HTMLSelectElement, options: Select3Options = {}): Select3 {
     if (!(select instanceof HTMLSelectElement)) {
         throw new TypeError('createSelect3 expects a <select> element');
     }
