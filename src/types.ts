@@ -11,10 +11,20 @@ export interface Select3Options {
     maxRender?: number;
     loadingText?: string;
     moreText?: (n: number) => string;
+    // Behavior flags (P1).
+    closeOnSelect?: boolean;
+    openOnFocus?: boolean;
+    selectOnTab?: boolean;
+    hidePlaceholder?: boolean;
+    maxItems?: number | null;
+    maxReachedText?: (max: number) => string;
 }
 
 /** Resolved, fully-populated config held on the instance. */
-export type Select3Config = Required<Omit<Select3Options, 'ajax'>> & { ajax: string | null };
+export type Select3Config = Required<Omit<Select3Options, 'ajax' | 'maxItems'>> & {
+    ajax: string | null;
+    maxItems: number | null;
+};
 
 /** A normalized view of a native <option>. */
 export interface Item {
@@ -24,4 +34,12 @@ export interface Item {
     disabled: boolean;
     placeholder: boolean;
     group: string | null;
+}
+
+/** Shape accepted by addOption()/addOptions(). */
+export interface AddOptionInput {
+    value: string;
+    label: string;
+    selected?: boolean;
+    disabled?: boolean;
 }

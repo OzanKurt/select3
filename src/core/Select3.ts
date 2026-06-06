@@ -14,7 +14,9 @@
  * option labels can't inject markup.
  */
 
-import type { Select3Options, Select3Config, Item } from '../types';
+import type { Select3Options, Select3Config, Item, AddOptionInput } from '../types';
+import { Emitter } from './emitter';
+import type { Handler } from './emitter';
 
 declare global {
     interface HTMLSelectElement {
@@ -59,6 +61,8 @@ export class Select3 {
     private _labelId: string | null = null;
     private _ariaLabel: string | null;
     private _ariaRequired = false;
+    private _emitter = new Emitter();
+    private _locked = false;
 
     // Visual nodes (assigned in _build, before first use).
     wrap!: HTMLDivElement;
@@ -85,6 +89,12 @@ export class Select3 {
             maxRender: options.maxRender ?? 100,
             loadingText: options.loadingText ?? 'Searching…',
             moreText: options.moreText ?? ((n: number) => `${n} more, refine your search`),
+            closeOnSelect: options.closeOnSelect ?? !select.multiple,
+            openOnFocus: options.openOnFocus ?? false,
+            selectOnTab: options.selectOnTab ?? false,
+            hidePlaceholder: options.hidePlaceholder ?? false,
+            maxItems: options.maxItems ?? null,
+            maxReachedText: options.maxReachedText ?? ((max: number) => `Limit of ${max} reached`),
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -215,10 +225,14 @@ export class Select3 {
         });
         this.search.addEventListener('input', () => {
             this.activeIndex = 0;
+            this._emitter.emit('type', { query: this.search.value });
             if (this.config.ajax) this._scheduleRemote();
             else this._renderOptions();
         });
         this.search.addEventListener('keydown', (e: KeyboardEvent) => this._onSearchKey(e));
+        if (this.config.openOnFocus) {
+            this.control.addEventListener('focus', () => this.open());
+        }
         this.display.addEventListener('click', (e) => {
             const remove = (e.target as HTMLElement | null)?.closest<HTMLElement>('.s3__tag-remove');
             if (remove) {
@@ -242,6 +256,10 @@ export class Select3 {
             e.preventDefault();
             this.close();
             this.control.focus();
+        } else if (e.key === 'Tab' && this.config.selectOnTab) {
+            // Select the active option without preventing default, so focus
+            // still advances to the next field afterward.
+            this._chooseActive();
         } else if (e.key === 'Backspace' && this.search.value === '' && this.multiple) {
             const selected = this._selected();
             const last = selected[selected.length - 1];
@@ -254,7 +272,8 @@ export class Select3 {
     }
 
     open(): void {
-        if (this.select.disabled || this.isOpen) return;
+        if (this.select.disabled || this._locked || this.isOpen) return;
+        if (!this._allows('beforeOpen')) return;
         this.isOpen = true;
         this.wrap.classList.add('s3--open');
         this.search.setAttribute('aria-expanded', 'true');
@@ -263,6 +282,8 @@ export class Select3 {
         this._renderOptions();
         document.addEventListener('click', this._onDocClick);
         if (this.config.searchable) setTimeout(() => this.search.focus(), 0);
+        if (this.config.hidePlaceholder) this.sync();
+        this._emitter.emit('open');
     }
 
     close(): void {
@@ -272,11 +293,19 @@ export class Select3 {
         this.search.setAttribute('aria-expanded', 'false');
         this.search.removeAttribute('aria-activedescendant');
         document.removeEventListener('click', this._onDocClick);
+        if (this.config.hidePlaceholder) this.sync();
+        this._emitter.emit('close');
     }
 
     choose(value: string): void {
         const option = [...this.select.options].find((o) => o.value === value);
-        if (!option || option.disabled) return;
+        if (!option || option.disabled || this._locked) return;
+        // Respect the multi-select cap: block selecting a new value when full.
+        if (this.multiple && !option.selected && this.isFull()) {
+            if (this.isOpen) this._renderOptions();
+            return;
+        }
+        if (!this._allows('beforeSelect', { value })) return;
 
         if (this.multiple) {
             option.selected = true;
@@ -285,27 +314,34 @@ export class Select3 {
         }
 
         this._emit();
+        this._emitter.emit('select', { value });
+        this._emitter.emit('change', { value: this.getValue() });
         this.sync();
 
-        if (this.multiple) {
-            this.search.value = '';
-            this._renderOptions();
-            this.search.focus();
-        } else {
+        if (this.config.closeOnSelect) {
             this.close();
             this.control.focus();
+        } else {
+            this.search.value = '';
+            if (this.isOpen) this._renderOptions();
+            if (this.config.searchable) this.search.focus();
         }
     }
 
     deselect(value: string): void {
+        if (this._locked) return;
         const option = [...this.select.options].find((o) => o.value === value);
         if (option) option.selected = false;
         this._emit();
+        this._emitter.emit('deselect', { value });
+        this._emitter.emit('change', { value: this.getValue() });
         this.sync();
         if (this.isOpen) this._renderOptions();
     }
 
     clearAll(): void {
+        if (this._locked) return;
+        if (!this._allows('beforeClear')) return;
         [...this.select.options].forEach((o) => {
             if (o.value !== '') o.selected = false;
         });
@@ -314,6 +350,8 @@ export class Select3 {
             if (placeholder) placeholder.selected = true;
         }
         this._emit();
+        this._emitter.emit('clear');
+        this._emitter.emit('change', { value: this.getValue() });
         this.sync();
         if (this.isOpen) this._renderOptions();
     }
@@ -343,7 +381,9 @@ export class Select3 {
         this.display.replaceChildren();
 
         if (!selected.length) {
-            this.display.append(this._placeholderEl());
+            if (!(this.config.hidePlaceholder && this.isOpen)) {
+                this.display.append(this._placeholderEl());
+            }
         } else if (this.multiple) {
             selected.forEach((item) => this.display.append(this._tagEl(item)));
         } else {
@@ -530,6 +570,14 @@ export class Select3 {
             this.listbox.append(more);
         }
 
+        // When the multi-select cap is reached, show a localized hint; further
+        // unselected options are blocked in choose().
+        if (this.isFull() && this.config.maxItems != null) {
+            const hint = el('div', 's3__more s3__max');
+            hint.textContent = this.config.maxReachedText(this.config.maxItems);
+            this.listbox.append(hint);
+        }
+
         // Make sure the resting highlight is on a selectable row, never a
         // disabled one (e.g. when the first match is disabled after a search).
         const rows = [...this.listbox.querySelectorAll('.s3__option')];
@@ -593,7 +641,134 @@ export class Select3 {
         if (this.isOpen) this._renderOptions();
     }
 
+    // ----- Events ---------------------------------------------------------
+
+    /** Subscribe to an instance event; returns an unsubscribe function. */
+    on(event: string, handler: Handler): () => void {
+        return this._emitter.on(event, handler);
+    }
+
+    /** Subscribe once; auto-unsubscribes after the first emit. */
+    once(event: string, handler: Handler): () => void {
+        return this._emitter.once(event, handler);
+    }
+
+    /** Unsubscribe a handler, or all handlers for an event when omitted. */
+    off(event: string, handler?: Handler): void {
+        this._emitter.off(event, handler);
+    }
+
+    /** Emit a cancelable `before*` event; returns false if a listener prevented it. */
+    private _allows(event: string, detail: Record<string, unknown> = {}): boolean {
+        let allowed = true;
+        this._emitter.emit(event, { ...detail, preventDefault: () => (allowed = false) });
+        return allowed;
+    }
+
+    // ----- Value & option methods ----------------------------------------
+
+    /** Current value: an array for multi-select, a string for single. */
+    getValue(): string | string[] {
+        const values = this._selected().map((i) => i.value);
+        return this.multiple ? values : (values[0] ?? '');
+    }
+
+    /** Set the selection from a value or array of values. */
+    setValue(value: string | string[]): void {
+        const wanted = new Set(Array.isArray(value) ? value : value === '' ? [] : [value]);
+        [...this.select.options].forEach((o) => {
+            if (o.value !== '') o.selected = wanted.has(o.value);
+        });
+        if (!this.multiple && !wanted.size) {
+            const placeholder = [...this.select.options].find((o) => o.value === '');
+            if (placeholder) placeholder.selected = true;
+        }
+        this._emit();
+        this._emitter.emit('change', { value: this.getValue() });
+        this.refresh();
+    }
+
+    /** Add a native <option> if its value isn't already present. */
+    addOption(input: AddOptionInput): void {
+        if ([...this.select.options].some((o) => o.value === input.value)) return;
+        const option = new Option(input.label, input.value, false, !!input.selected);
+        if (input.disabled) option.disabled = true;
+        this.select.add(option);
+        this._emitter.emit('optionAdd', { value: input.value });
+        if (input.selected) this._emit();
+        this.refresh();
+    }
+
+    addOptions(inputs: AddOptionInput[]): void {
+        inputs.forEach((i) => this.addOption(i));
+    }
+
+    /** Remove an option by value. */
+    removeOption(value: string): void {
+        const option = [...this.select.options].find((o) => o.value === value);
+        if (!option) return;
+        const wasSelected = option.selected;
+        option.remove();
+        this._emitter.emit('optionRemove', { value });
+        if (wasSelected) this._emit();
+        this.refresh();
+    }
+
+    getOption(value: string): Item | null {
+        return this._items().find((i) => i.value === value) ?? null;
+    }
+
+    /** Remove every non-placeholder option. */
+    clearOptions(): void {
+        [...this.select.options].forEach((o) => {
+            if (o.value !== '') o.remove();
+        });
+        this.refresh();
+    }
+
+    // ----- State methods --------------------------------------------------
+
+    enable(): void {
+        this.select.disabled = false;
+        this.control.tabIndex = 0;
+        this.wrap.classList.remove('s3--disabled');
+    }
+
+    disable(): void {
+        this.select.disabled = true;
+        this.control.tabIndex = -1;
+        this.wrap.classList.add('s3--disabled');
+        this.close();
+    }
+
+    /** Lock: keep the selection visible but reject all edits. */
+    lock(): void {
+        this._locked = true;
+        this.wrap.classList.add('s3--locked');
+        this.close();
+    }
+
+    unlock(): void {
+        this._locked = false;
+        this.wrap.classList.remove('s3--locked');
+    }
+
+    /** True when a multi-select has reached its maxItems cap. */
+    isFull(): boolean {
+        return this.multiple && this.config.maxItems != null && this._selected().length >= this.config.maxItems;
+    }
+
+    focus(): void {
+        this.control.focus();
+    }
+
+    blur(): void {
+        this.close();
+        this.control.blur();
+    }
+
     destroy(): void {
+        this._emitter.emit('destroy');
         document.removeEventListener('click', this._onDocClick);
         clearTimeout(this._debounce ?? undefined);
         if (this._abort) this._abort.abort();
@@ -609,6 +784,7 @@ export class Select3 {
         this.select.tabIndex = 0;
         if (this._ariaRequired) this.select.required = true;
         delete this.select._s3;
+        this._emitter.clear();
     }
 }
 
