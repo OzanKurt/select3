@@ -132,6 +132,10 @@
 .s3--open .s3__dropdown {
     display: block;
 }
+.s3--flip-up .s3__dropdown {
+    top: auto;
+    bottom: calc(100% + 0.25rem);
+}
 
 .s3__search-wrap {
     padding: 0.4rem;

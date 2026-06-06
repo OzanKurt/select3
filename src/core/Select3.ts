@@ -20,6 +20,7 @@ import type { Handler } from './emitter';
 import { fold } from '../search/diacritics';
 import { scoreItem } from '../search/sifter';
 import { highlight } from '../search/highlight';
+import { resolveDropdownParent, computeFlip, placeDropdown, resetDropdown } from '../render/position';
 
 declare global {
     interface HTMLSelectElement {
@@ -60,6 +61,8 @@ export class Select3 {
     private _ariaRequired = false;
     private _emitter = new Emitter();
     private _locked = false;
+    private _portalParent: HTMLElement | null = null;
+    private _reposition: () => void;
 
     // Visual nodes (assigned in _build, before first use).
     wrap!: HTMLDivElement;
@@ -98,10 +101,27 @@ export class Select3 {
             highlight: options.highlight ?? true,
             minResultsForSearch: options.minResultsForSearch ?? 0,
             maxInputLength: options.maxInputLength ?? 0,
+            appendTo: options.appendTo ?? 'auto',
+            dropdownGap: options.dropdownGap ?? 4,
+            dropdownZ: options.dropdownZ ?? 1100,
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
-            if (!this.wrap.contains(e.target as Node)) this.close();
+            const target = e.target as Node;
+            // The dropdown may be portaled outside the wrap (modal/body), so an
+            // outside click must check both the wrap and the dropdown.
+            if (!this.wrap.contains(target) && !this.dropdown.contains(target)) this.close();
+        };
+        this._reposition = () => {
+            if (this.isOpen && this._portalParent) {
+                placeDropdown(
+                    this.control,
+                    this.dropdown,
+                    this._portalParent,
+                    this.config.dropdownGap,
+                    this.config.dropdownZ,
+                );
+            }
         };
 
         // Resolve the native select's accessible name so the visible widgets
@@ -286,6 +306,7 @@ export class Select3 {
         this.search.value = '';
         this.activeIndex = 0;
         this._renderOptions();
+        this._positionOpen();
         document.addEventListener('click', this._onDocClick);
         // Hide the search box when there are too few options to be worth filtering.
         const showSearch =
@@ -304,8 +325,41 @@ export class Select3 {
         this.search.setAttribute('aria-expanded', 'false');
         this.search.removeAttribute('aria-activedescendant');
         document.removeEventListener('click', this._onDocClick);
+        this._restoreDropdown();
         if (this.config.hidePlaceholder) this.sync();
         this._emitter.emit('close');
+    }
+
+    /** Attach + position the dropdown (portaled into a modal/body, or in-flow). */
+    private _positionOpen(): void {
+        const parent = resolveDropdownParent(this.control, this.config.appendTo);
+        this._portalParent = parent;
+        if (parent) {
+            parent.appendChild(this.dropdown);
+            this.dropdown.style.display = 'block';
+            placeDropdown(this.control, this.dropdown, parent, this.config.dropdownGap, this.config.dropdownZ);
+            window.addEventListener('scroll', this._reposition, true);
+            window.addEventListener('resize', this._reposition);
+        } else {
+            const flipUp = computeFlip(
+                this.control.getBoundingClientRect(),
+                this.dropdown.offsetHeight || 0,
+                window.innerHeight,
+            );
+            this.wrap.classList.toggle('s3--flip-up', flipUp);
+        }
+    }
+
+    /** Undo portaling: drop listeners, clear inline coords, move back into wrap. */
+    private _restoreDropdown(): void {
+        if (this._portalParent) {
+            window.removeEventListener('scroll', this._reposition, true);
+            window.removeEventListener('resize', this._reposition);
+            resetDropdown(this.dropdown);
+            this.wrap.appendChild(this.dropdown);
+            this._portalParent = null;
+        }
+        this.wrap.classList.remove('s3--flip-up');
     }
 
     choose(value: string): void {
@@ -797,6 +851,7 @@ export class Select3 {
     }
 
     destroy(): void {
+        if (this.isOpen) this.close();
         this._emitter.emit('destroy');
         document.removeEventListener('click', this._onDocClick);
         clearTimeout(this._debounce ?? undefined);

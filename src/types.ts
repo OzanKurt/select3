@@ -1,3 +1,6 @@
+/** Where the dropdown is attached. 'auto' portals into a modal ancestor if any. */
+export type AppendTo = 'auto' | 'self' | 'body' | HTMLElement;
+
 /** Public option bag accepted by createSelect3 / new Select3. All optional. */
 export interface Select3Options {
     placeholder?: string;
@@ -24,6 +27,10 @@ export interface Select3Options {
     highlight?: boolean;
     minResultsForSearch?: number;
     maxInputLength?: number;
+    // Positioning & modal compatibility (P3).
+    appendTo?: AppendTo;
+    dropdownGap?: number;
+    dropdownZ?: number;
 }
 
 /** Resolved, fully-populated config held on the instance. */
