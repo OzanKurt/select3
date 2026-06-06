@@ -186,6 +186,9 @@ export const Select3Vue = defineComponent({
 
             created.on('change', (detail) => {
                 const next = (detail as { value: string | string[] }).value;
+                // Skip the echo from a programmatic setValue() (the watch already
+                // advanced lastValue before calling it); only emit real edits.
+                if (sameValue(next, lastValue)) return;
                 lastValue = next;
                 emit('update:modelValue', next);
             });

@@ -82,6 +82,7 @@ const sameValue = (a: string | string[], b: string | string[]): boolean => {
         const set = new Set(a);
         return b.every((v) => set.has(v));
     }
+    if (Array.isArray(a) || Array.isArray(b)) return false;
     return a === b;
 };
 
@@ -129,6 +130,9 @@ export default function Select3React(props: Select3ReactProps): ReactElement {
 
         const off = instance.on('change', (detail) => {
             const next = (detail as { value: string | string[] }).value;
+            // Suppress the echo from a programmatic setValue() (the mirror effect
+            // already advanced lastValueRef before calling it); forward real edits.
+            if (lastValueRef.current !== undefined && sameValue(next, lastValueRef.current)) return;
             lastValueRef.current = next;
             onChangeRef.current?.(next);
         });

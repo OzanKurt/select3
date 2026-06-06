@@ -55,6 +55,30 @@ const makeDataTransfer = () => ({
 describe('drag-drop plugin', () => {
     beforeEach(() => document.body.replaceChildren());
 
+    it('does not throw when dragging across <optgroup> boundaries', () => {
+        const select = document.createElement('select');
+        select.multiple = true;
+        const g1 = document.createElement('optgroup');
+        g1.label = 'G1';
+        g1.appendChild(new Option('A', 'a', false, true));
+        const g2 = document.createElement('optgroup');
+        g2.label = 'G2';
+        g2.appendChild(new Option('B', 'b', false, true));
+        select.append(g1, g2);
+        document.body.appendChild(select);
+        const instance = createSelect3(select, { plugins: [dragDrop] });
+
+        const dt = makeDataTransfer();
+        const display = instance.display;
+        expect(() => {
+            fireDrag(tagFor(display, 'a'), 'dragstart', dt);
+            fireDrag(tagFor(display, 'b'), 'dragover', dt);
+            fireDrag(tagFor(display, 'b'), 'drop', dt);
+        }).not.toThrow();
+        // A cross-group drag is a guarded no-op, so the order is unchanged.
+        expect([...select.options].map((o) => o.value)).toEqual(['a', 'b']);
+    });
+
     it('reorders selected <option> nodes and getValue() on drop (drag a tag right)', () => {
         const { select, instance } = mountMulti();
         expect(optionOrder(select)).toEqual(['a', 'b', 'c']);

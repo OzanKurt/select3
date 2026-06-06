@@ -86,6 +86,10 @@ export const dragDrop: PluginFactory = (instance: Select3) => {
         const fromIdx = options.indexOf(from);
         const toIdx = options.indexOf(to);
 
+        // Both options must share a parent (e.g. the same <optgroup>) for
+        // insertBefore to be valid; bail on cross-group drags rather than throw.
+        if (from.parentElement !== to.parentElement) return;
+
         // Dragging a tag onto one to its right should drop it *after* that
         // target; onto one to its left, *before* it. insertBefore handles both:
         // for a rightward move we anchor before the target's next sibling.

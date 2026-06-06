@@ -18,9 +18,14 @@ import type {
     RenderContext,
     PluginFactory,
     Select3Plugin,
+    Transport,
+    ProcessResults,
+    ProcessedResults,
+    RemoteRow,
+    AppendTo,
 } from './types';
 
-export const VERSION = '0.2.0';
+export const VERSION = '1.0.0';
 export { Select3, createSelect3, Emitter, setLocale, getLocale, registerPlugin };
 export type {
     Select3Options,
@@ -34,5 +39,10 @@ export type {
     RenderContext,
     PluginFactory,
     Select3Plugin,
+    Transport,
+    ProcessResults,
+    ProcessedResults,
+    RemoteRow,
+    AppendTo,
 };
 export default createSelect3;
