@@ -58,6 +58,19 @@ export interface Select3Options {
     queryParam?: string;
     pageParam?: string;
     loadingMoreText?: string;
+    // SumoSelect UX (P5).
+    selectAll?: boolean;
+    selectAllText?: string;
+    clearAllText?: string;
+    okCancel?: boolean;
+    okText?: string;
+    cancelText?: string;
+    clickAway?: 'commit' | 'revert';
+    csvDispCount?: number;
+    captionFormat?: (n: number) => string;
+    captionFormatAllSelected?: (n: number) => string;
+    captionPrefix?: string;
+    checkboxes?: boolean;
 }
 
 /** Resolved, fully-populated config held on the instance. */

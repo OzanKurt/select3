@@ -213,3 +213,88 @@
     text-align: center;
     color: var(--color-muted, #6b7280);
 }
+
+/* SumoSelect UX (P5): select-all, checkboxes, caption, OK/Cancel footer. */
+.s3__selectall {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.45rem 0.55rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 0.35rem;
+}
+.s3__selectall:hover {
+    background-color: var(--color-surface-muted, #f3f4f6);
+}
+.s3__clearall {
+    display: block;
+    width: 100%;
+    padding: 0.3rem 0.55rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    text-align: left;
+    color: var(--color-muted, #6b7280);
+    cursor: pointer;
+}
+.s3__clearall:hover {
+    color: var(--color-content, #1f2937);
+}
+.s3__option--cb {
+    justify-content: flex-start;
+    gap: 0.5rem;
+}
+.s3__checkbox {
+    position: relative;
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border, #cbd5e1);
+    border-radius: 0.2rem;
+}
+.s3__checkbox.is-checked,
+.s3__checkbox.is-indeterminate {
+    background-color: var(--color-primary-600, #2563eb);
+    border-color: var(--color-primary-600, #2563eb);
+}
+.s3__checkbox.is-checked::after {
+    content: "";
+    position: absolute;
+    left: 0.3rem;
+    top: 0.1rem;
+    width: 0.25rem;
+    height: 0.5rem;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+.s3__checkbox.is-indeterminate::after {
+    content: "";
+    position: absolute;
+    left: 0.18rem;
+    top: 0.42rem;
+    width: 0.55rem;
+    border-top: 2px solid #fff;
+}
+.s3__footer {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    padding: 0.5rem;
+    border-top: 1px solid var(--color-border, #e5e7eb);
+}
+.s3__btn {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--color-content, #1f2937);
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 0.35rem;
+    cursor: pointer;
+}
+.s3__btn-ok {
+    color: #fff;
+    background-color: var(--color-primary-600, #2563eb);
+    border-color: var(--color-primary-600, #2563eb);
+}

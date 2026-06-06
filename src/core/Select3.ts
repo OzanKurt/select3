@@ -65,6 +65,7 @@ export class Select3 {
     private _locked = false;
     private _portalParent: HTMLElement | null = null;
     private _reposition: () => void;
+    private _okSnapshot: string[] | null = null;
 
     // Visual nodes (assigned in _build, before first use).
     wrap!: HTMLDivElement;
@@ -113,6 +114,18 @@ export class Select3 {
             queryParam: options.queryParam ?? 'q',
             pageParam: options.pageParam ?? 'page',
             loadingMoreText: options.loadingMoreText ?? 'Loading more…',
+            selectAll: options.selectAll ?? false,
+            selectAllText: options.selectAllText ?? 'Select all',
+            clearAllText: options.clearAllText ?? 'Clear all',
+            okCancel: options.okCancel ?? false,
+            okText: options.okText ?? 'OK',
+            cancelText: options.cancelText ?? 'Cancel',
+            clickAway: options.clickAway ?? 'commit',
+            csvDispCount: options.csvDispCount ?? 0,
+            captionFormat: options.captionFormat ?? ((n: number) => `${n} selected`),
+            captionFormatAllSelected: options.captionFormatAllSelected ?? ((n: number) => `All ${n} selected`),
+            captionPrefix: options.captionPrefix ?? '',
+            checkboxes: options.checkboxes ?? false,
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -278,6 +291,27 @@ export class Select3 {
         this.dropdown.append(searchWrap, this.listbox);
         this.search.setAttribute('aria-controls', this.listbox.id);
 
+        // OK/Cancel footer (staging mode): edits apply on OK, revert otherwise.
+        if (this.config.okCancel) {
+            const footer = el('div', 's3__footer');
+            const cancel = el('button', 's3__btn s3__btn-cancel');
+            cancel.type = 'button';
+            cancel.textContent = this.config.cancelText;
+            cancel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.cancel();
+            });
+            const ok = el('button', 's3__btn s3__btn-ok');
+            ok.type = 'button';
+            ok.textContent = this.config.okText;
+            ok.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.confirm();
+            });
+            footer.append(cancel, ok);
+            this.dropdown.append(footer);
+        }
+
         // Accessible name: wire the resolved label to the visible widgets, or
         // copy aria-label when there is no labelable element.
         if (this._labelId) {
@@ -367,6 +401,8 @@ export class Select3 {
         if (this.select.disabled || this._locked || this.isOpen) return;
         if (!this._allows('beforeOpen')) return;
         this.isOpen = true;
+        // Snapshot the selection so OK/Cancel can commit or revert the staging.
+        if (this.config.okCancel) this._okSnapshot = this._selected().map((i) => i.value);
         this.wrap.classList.add('s3--open');
         this.search.setAttribute('aria-expanded', 'true');
         this.search.value = '';
@@ -390,6 +426,11 @@ export class Select3 {
 
     close(): void {
         if (!this.isOpen) return;
+        // Finalize OK/Cancel staging on dismissal (outside click / Escape).
+        if (this.config.okCancel && this._okSnapshot !== null) {
+            if (this.config.clickAway === 'revert') this._revertStaging();
+            else this._commitStaging();
+        }
         this.isOpen = false;
         this.wrap.classList.remove('s3--open');
         this.search.setAttribute('aria-expanded', 'false');
@@ -448,9 +489,8 @@ export class Select3 {
             [...this.select.options].forEach((o) => (o.selected = o.value === value));
         }
 
-        this._emit();
         this._emitter.emit('select', { value });
-        this._emitter.emit('change', { value: this.getValue() });
+        this._changed();
         this.sync();
 
         if (this.config.closeOnSelect) {
@@ -467,9 +507,8 @@ export class Select3 {
         if (this._locked) return;
         const option = [...this.select.options].find((o) => o.value === value);
         if (option) option.selected = false;
-        this._emit();
         this._emitter.emit('deselect', { value });
-        this._emitter.emit('change', { value: this.getValue() });
+        this._changed();
         this.sync();
         if (this.isOpen) this._renderOptions();
     }
@@ -484,11 +523,69 @@ export class Select3 {
             const placeholder = [...this.select.options].find((o) => o.value === '');
             if (placeholder) placeholder.selected = true;
         }
-        this._emit();
         this._emitter.emit('clear');
-        this._emitter.emit('change', { value: this.getValue() });
+        this._changed();
         this.sync();
         if (this.isOpen) this._renderOptions();
+    }
+
+    /** Select every enabled option (multi only); respects the maxItems cap. */
+    selectAll(): void {
+        if (this._locked || !this.multiple) return;
+        const enabled = [...this.select.options].filter((o) => o.value !== '' && !o.disabled);
+        const cap = this.config.maxItems;
+        enabled.forEach((o, i) => {
+            if (cap == null || i < cap) o.selected = true;
+        });
+        this._emitter.emit('selectAll');
+        this._changed();
+        this.sync();
+        if (this.isOpen) this._renderOptions();
+    }
+
+    /** OK: commit the staged selection (no-op when not in okCancel mode). */
+    confirm(): void {
+        if (this.config.okCancel) this._commitStaging();
+        this.close();
+    }
+
+    /** Cancel: revert to the snapshot taken when the dropdown opened. */
+    cancel(): void {
+        if (this.config.okCancel) this._revertStaging();
+        this.close();
+    }
+
+    /** Dispatch the native change + the `change` event, unless staging edits. */
+    private _changed(): void {
+        if (this.config.okCancel && this._okSnapshot !== null) return;
+        this._emit();
+        this._emitter.emit('change', { value: this.getValue() });
+    }
+
+    private _commitStaging(): void {
+        const snapshot = this._okSnapshot ?? [];
+        const current = this._selected().map((i) => i.value);
+        const changed = current.length !== snapshot.length || current.some((v) => !snapshot.includes(v));
+        this._okSnapshot = null;
+        if (changed) {
+            this._emit();
+            this._emitter.emit('change', { value: this.getValue() });
+        }
+        this._emitter.emit('okCancel:ok');
+    }
+
+    private _revertStaging(): void {
+        const snapshot = new Set(this._okSnapshot ?? []);
+        this._okSnapshot = null;
+        [...this.select.options].forEach((o) => {
+            if (o.value !== '') o.selected = snapshot.has(o.value);
+        });
+        if (!this.multiple && !snapshot.size) {
+            const placeholder = [...this.select.options].find((o) => o.value === '');
+            if (placeholder) placeholder.selected = true;
+        }
+        this.sync();
+        this._emitter.emit('okCancel:cancel');
     }
 
     createTag(label: string): void {
@@ -520,7 +617,20 @@ export class Select3 {
                 this.display.append(this._placeholderEl());
             }
         } else if (this.multiple) {
-            selected.forEach((item) => this.display.append(this._tagEl(item)));
+            const total = this._items().filter((i) => !i.placeholder).length;
+            if (this.config.csvDispCount > 0 && selected.length > this.config.csvDispCount) {
+                // Past the threshold, collapse the tags into an "N selected" caption.
+                const allSelected = total > 0 && selected.length >= total;
+                const caption = el('span', 's3__caption');
+                caption.textContent =
+                    this.config.captionPrefix +
+                    (allSelected
+                        ? this.config.captionFormatAllSelected(selected.length)
+                        : this.config.captionFormat(selected.length));
+                this.display.append(caption);
+            } else {
+                selected.forEach((item) => this.display.append(this._tagEl(item)));
+            }
         } else {
             const single = el('span', 's3__single');
             single.textContent = selected[0]?.label ?? '';
@@ -617,6 +727,33 @@ export class Select3 {
             return;
         }
 
+        // SumoSelect-style Select-All / Clear-All header (multi only).
+        if (this.multiple && this.config.selectAll) {
+            const enabled = all.filter((i) => !i.disabled);
+            const selCount = enabled.filter((i) => i.selected).length;
+            const allSelected = enabled.length > 0 && selCount === enabled.length;
+
+            const row = el('div', 's3__selectall');
+            const box = el('span', 's3__checkbox');
+            if (allSelected) box.classList.add('is-checked');
+            else if (selCount > 0) box.classList.add('is-indeterminate');
+            const label = el('span');
+            label.textContent = this.config.selectAllText;
+            row.append(box, label);
+            row.addEventListener('click', () => (allSelected ? this.clearAll() : this.selectAll()));
+            this.listbox.append(row);
+
+            const clear = el('button', 's3__clearall');
+            clear.type = 'button';
+            clear.textContent = this.config.clearAllText;
+            clear.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.clearAll();
+            });
+            this.listbox.append(clear);
+        }
+
+        const checkboxMode = this.multiple && this.config.checkboxes;
         let lastGroup: string | null = null;
         this.matches.forEach((item, idx) => {
             if (item.group && item.group !== lastGroup) {
@@ -633,6 +770,13 @@ export class Select3 {
             option.classList.toggle('is-selected', item.selected);
             option.classList.toggle('is-disabled', item.disabled);
 
+            if (checkboxMode) {
+                option.classList.add('s3__option--cb');
+                const box = el('span', 's3__checkbox');
+                if (item.selected) box.classList.add('is-checked');
+                option.append(box);
+            }
+
             const label = el('span');
             if (this.config.highlight && rawQuery) {
                 highlight(item.label, rawQuery).forEach((n) => label.appendChild(n));
@@ -640,7 +784,7 @@ export class Select3 {
                 label.textContent = item.label;
             }
             option.append(label);
-            if (item.selected) option.append(iconEl('fa-solid fa-check s3__check'));
+            if (item.selected && !checkboxMode) option.append(iconEl('fa-solid fa-check s3__check'));
 
             option.addEventListener('mouseenter', () => {
                 this.activeIndex = idx;
