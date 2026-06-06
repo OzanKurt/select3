@@ -30,7 +30,19 @@
             "import": "./dist/plugins/optgroup-columns.js"
         },
         "./plugins/drag-drop.css": "./src/plugins/drag-drop.css",
-        "./plugins/optgroup-columns.css": "./src/plugins/optgroup-columns.css"
+        "./plugins/optgroup-columns.css": "./src/plugins/optgroup-columns.css",
+        "./react": {
+            "types": "./dist/frameworks/react.d.ts",
+            "import": "./dist/frameworks/react.js"
+        },
+        "./vue": {
+            "types": "./dist/frameworks/vue.d.ts",
+            "import": "./dist/frameworks/vue.js"
+        },
+        "./alpine": {
+            "types": "./dist/frameworks/alpine.d.ts",
+            "import": "./dist/frameworks/alpine.js"
+        }
     },
     "files": [
         "dist",
@@ -69,11 +81,25 @@
         "test": "vitest run",
         "prepublishOnly": "npm run build"
     },
+    "peerDependencies": {
+        "alpinejs": "^3.0.0",
+        "react": ">=17",
+        "vue": "^3.0.0"
+    },
+    "peerDependenciesMeta": {
+        "alpinejs": { "optional": true },
+        "react": { "optional": true },
+        "vue": { "optional": true }
+    },
     "devDependencies": {
+        "@types/react": "^18.3.0",
+        "alpinejs": "^3.13.0",
+        "jsdom": "^25.0.0",
+        "react": "^18.3.0",
         "tsup": "^8.0.0",
         "typescript": "^5.5.0",
         "vitest": "^4.0.0",
-        "jsdom": "^25.0.0"
+        "vue": "^3.4.0"
     },
     "license": "MIT",
     "author": "Ozan Kurt"
