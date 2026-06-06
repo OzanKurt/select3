@@ -1,5 +1,38 @@
+import type { Locale } from './i18n/types';
+
 /** Where the dropdown is attached. 'auto' portals into a modal ancestor if any. */
 export type AppendTo = 'auto' | 'self' | 'body' | HTMLElement;
+
+/** Extra classes merged onto Select3's elements for style customization. */
+export interface ClassNames {
+    wrap?: string;
+    control?: string;
+    dropdown?: string;
+    listbox?: string;
+    option?: string;
+    tag?: string;
+    search?: string;
+}
+
+/** Passed to every template slot; `escape` HTML-escapes interpolated strings. */
+export interface RenderContext {
+    escape: (s: string) => string;
+}
+
+/**
+ * Custom render slots. Each returns a string (inserted as safe text) or a DOM
+ * Node (inserted as-is — the caller owns its safety; Select3 never uses innerHTML).
+ */
+export interface Select3Templates {
+    option?: (item: Item, ctx: RenderContext) => string | Node;
+    item?: (item: Item, ctx: RenderContext) => string | Node;
+    optgroupHeader?: (group: string, ctx: RenderContext) => string | Node;
+    noResults?: (query: string, ctx: RenderContext) => string | Node;
+    loading?: (ctx: RenderContext) => string | Node;
+    loadingMore?: (ctx: RenderContext) => string | Node;
+    create?: (query: string, ctx: RenderContext) => string | Node;
+    caption?: (count: number, total: number, ctx: RenderContext) => string | Node;
+}
 
 /** A normalized remote row. `value`/`label` are required; extra fields are kept. */
 export interface RemoteRow {
@@ -71,10 +104,17 @@ export interface Select3Options {
     captionFormatAllSelected?: (n: number) => string;
     captionPrefix?: string;
     checkboxes?: boolean;
+    // Localization & style customization (P6).
+    i18n?: Partial<Locale>;
+    locale?: Partial<Locale>;
+    classNames?: ClassNames;
+    rtl?: boolean;
+    size?: 'sm' | 'md' | 'lg';
+    templates?: Select3Templates;
 }
 
 /** Resolved, fully-populated config held on the instance. */
-export type Select3Config = Required<Omit<Select3Options, 'ajax' | 'maxItems'>> & {
+export type Select3Config = Required<Omit<Select3Options, 'ajax' | 'maxItems' | 'i18n' | 'locale'>> & {
     ajax: string | null;
     maxItems: number | null;
 };

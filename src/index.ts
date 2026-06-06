@@ -5,9 +5,29 @@
 import createSelect3, { Select3 } from './core/Select3';
 import { Emitter } from './core/emitter';
 import type { Handler } from './core/emitter';
-import type { Select3Options, Select3Config, Item, AddOptionInput } from './types';
+import { setLocale, getLocale } from './i18n/registry';
+import type { Locale } from './i18n/types';
+import type {
+    Select3Options,
+    Select3Config,
+    Item,
+    AddOptionInput,
+    ClassNames,
+    Select3Templates,
+    RenderContext,
+} from './types';
 
 export const VERSION = '0.2.0';
-export { Select3, createSelect3, Emitter };
-export type { Select3Options, Select3Config, Item, AddOptionInput, Handler };
+export { Select3, createSelect3, Emitter, setLocale, getLocale };
+export type {
+    Select3Options,
+    Select3Config,
+    Item,
+    AddOptionInput,
+    Handler,
+    Locale,
+    ClassNames,
+    Select3Templates,
+    RenderContext,
+};
 export default createSelect3;

@@ -11,11 +11,17 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.js"
         },
-        "./css": "./src/select3.css"
+        "./css": "./src/select3.css",
+        "./themes/*": "./src/themes/*.css",
+        "./i18n/*": {
+            "types": "./dist/i18n/*.d.ts",
+            "import": "./dist/i18n/*.js"
+        }
     },
     "files": [
         "dist",
         "src/select3.css",
+        "src/themes",
         "README.md"
     ],
     "sideEffects": [

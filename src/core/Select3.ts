@@ -22,6 +22,7 @@ import { scoreItem } from '../search/sifter';
 import { highlight } from '../search/highlight';
 import { resolveDropdownParent, computeFlip, placeDropdown, resetDropdown } from '../render/position';
 import { AjaxAdapter, defaultTransport, defaultProcessResults } from '../data/ajax-adapter';
+import { resolveLocale } from '../i18n/registry';
 import type { RemoteRow } from '../types';
 
 declare global {
@@ -42,6 +43,11 @@ const iconEl = (className: string): HTMLElement => {
     const i = document.createElement('i');
     i.className = className;
     return i;
+};
+
+/** Merge a space-separated class string onto a node (style customization). */
+const addClasses = (node: HTMLElement, classes?: string): void => {
+    if (classes) node.classList.add(...classes.split(/\s+/).filter(Boolean));
 };
 
 export class Select3 {
@@ -81,24 +87,25 @@ export class Select3 {
     constructor(select: HTMLSelectElement, options: Select3Options = {}) {
         this.select = select;
         this.multiple = select.multiple;
+        const locale = resolveLocale(options);
         this.config = {
-            placeholder: select.dataset.placeholder ?? options.placeholder ?? 'Select…',
+            placeholder: select.dataset.placeholder ?? options.placeholder ?? locale.placeholder,
             allowClear: options.allowClear ?? true,
             tags: select.hasAttribute('data-tags') || !!options.tags,
             searchable: options.searchable ?? true,
-            noResults: options.noResults ?? 'No results',
-            createText: options.createText ?? ((q: string) => `Create “${q}”`),
+            noResults: options.noResults ?? locale.noResults,
+            createText: options.createText ?? locale.createText,
             ajax: select.dataset.ajax ?? options.ajax ?? null,
             minChars: options.minChars ?? (select.dataset.ajax || options.ajax ? 1 : 0),
             maxRender: options.maxRender ?? 100,
-            loadingText: options.loadingText ?? 'Searching…',
-            moreText: options.moreText ?? ((n: number) => `${n} more, refine your search`),
+            loadingText: options.loadingText ?? locale.loadingText,
+            moreText: options.moreText ?? locale.moreText,
             closeOnSelect: options.closeOnSelect ?? !select.multiple,
             openOnFocus: options.openOnFocus ?? false,
             selectOnTab: options.selectOnTab ?? false,
             hidePlaceholder: options.hidePlaceholder ?? false,
             maxItems: options.maxItems ?? null,
-            maxReachedText: options.maxReachedText ?? ((max: number) => `Limit of ${max} reached`),
+            maxReachedText: options.maxReachedText ?? locale.maxReachedText,
             searchField: options.searchField ?? ['label'],
             sort: options.sort ?? true,
             highlight: options.highlight ?? true,
@@ -113,19 +120,26 @@ export class Select3 {
             processResults: options.processResults ?? defaultProcessResults,
             queryParam: options.queryParam ?? 'q',
             pageParam: options.pageParam ?? 'page',
-            loadingMoreText: options.loadingMoreText ?? 'Loading more…',
+            loadingMoreText: options.loadingMoreText ?? locale.loadingMoreText,
             selectAll: options.selectAll ?? false,
-            selectAllText: options.selectAllText ?? 'Select all',
-            clearAllText: options.clearAllText ?? 'Clear all',
+            selectAllText: options.selectAllText ?? locale.selectAllText,
+            clearAllText: options.clearAllText ?? locale.clearAllText,
             okCancel: options.okCancel ?? false,
-            okText: options.okText ?? 'OK',
-            cancelText: options.cancelText ?? 'Cancel',
+            okText: options.okText ?? locale.okText,
+            cancelText: options.cancelText ?? locale.cancelText,
             clickAway: options.clickAway ?? 'commit',
             csvDispCount: options.csvDispCount ?? 0,
-            captionFormat: options.captionFormat ?? ((n: number) => `${n} selected`),
-            captionFormatAllSelected: options.captionFormatAllSelected ?? ((n: number) => `All ${n} selected`),
+            captionFormat: options.captionFormat ?? locale.captionFormat,
+            captionFormatAllSelected: options.captionFormatAllSelected ?? locale.captionFormatAllSelected,
             captionPrefix: options.captionPrefix ?? '',
             checkboxes: options.checkboxes ?? false,
+            classNames: options.classNames ?? {},
+            rtl:
+                options.rtl ??
+                (select.closest('[dir="rtl"]') !== null ||
+                    (typeof document !== 'undefined' && document.dir === 'rtl')),
+            size: options.size ?? 'md',
+            templates: options.templates ?? {},
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -323,6 +337,15 @@ export class Select3 {
             this.search.setAttribute('aria-label', this._ariaLabel);
             this.listbox.setAttribute('aria-label', this._ariaLabel);
         }
+
+        // Style customization: merge user classes + apply RTL direction.
+        const cn = this.config.classNames;
+        addClasses(this.wrap, cn.wrap);
+        addClasses(this.control, cn.control);
+        addClasses(this.dropdown, cn.dropdown);
+        addClasses(this.listbox, cn.listbox);
+        addClasses(this.search, cn.search);
+        if (this.config.rtl) this.wrap.setAttribute('dir', 'rtl');
 
         this.wrap.append(this.control, this.dropdown);
         this.select.after(this.wrap);
