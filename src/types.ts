@@ -104,6 +104,11 @@ export interface Select3Options {
     captionFormatAllSelected?: (n: number) => string;
     captionPrefix?: string;
     checkboxes?: boolean;
+    // Tagging extras (P7).
+    tokenSeparators?: string[];
+    createFilter?: RegExp | string | ((input: string) => boolean);
+    persist?: boolean;
+    addPrecedence?: boolean;
     // Localization & style customization (P6).
     i18n?: Partial<Locale>;
     locale?: Partial<Locale>;
@@ -114,9 +119,13 @@ export interface Select3Options {
 }
 
 /** Resolved, fully-populated config held on the instance. */
-export type Select3Config = Required<Omit<Select3Options, 'ajax' | 'maxItems' | 'i18n' | 'locale'>> & {
+export type Select3Config = Required<
+    Omit<Select3Options, 'ajax' | 'maxItems' | 'i18n' | 'locale' | 'createFilter'>
+> & {
     ajax: string | null;
     maxItems: number | null;
+    /** Normalized from RegExp/string/function into a single predicate. */
+    createFilter: (input: string) => boolean;
 };
 
 /** A normalized view of a native <option>. */

@@ -57,6 +57,19 @@ const escape = (s: string): string =>
         (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
     );
 
+/** Escape a string for safe use inside a RegExp character class. */
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Normalize the createFilter option (RegExp | string | fn) into a predicate. */
+const normalizeCreateFilter = (
+    cf: RegExp | string | ((input: string) => boolean) | undefined,
+): ((input: string) => boolean) => {
+    if (cf == null) return () => true;
+    if (typeof cf === 'function') return cf;
+    const re = cf instanceof RegExp ? cf : new RegExp(cf);
+    return (input: string) => re.test(input);
+};
+
 export class Select3 {
     select: HTMLSelectElement;
     multiple: boolean;
@@ -147,6 +160,10 @@ export class Select3 {
                     (typeof document !== 'undefined' && document.dir === 'rtl')),
             size: options.size ?? 'md',
             templates: options.templates ?? {},
+            tokenSeparators: options.tokenSeparators ?? [],
+            createFilter: normalizeCreateFilter(options.createFilter),
+            persist: options.persist ?? true,
+            addPrecedence: options.addPrecedence ?? false,
         };
         this.uid = `s3-${++uid}`;
         this._onDocClick = (e: MouseEvent) => {
@@ -382,6 +399,8 @@ export class Select3 {
         this.search.addEventListener('input', () => {
             this.activeIndex = 0;
             this._emitter.emit('type', { query: this.search.value });
+            // Tagging: split on token separators (typed or pasted) into tags.
+            if (this.config.tags && this.config.tokenSeparators.length && this._consumeSeparators()) return;
             if (this.config.ajax) this._remoteInput();
             else this._renderOptions();
         });
@@ -542,7 +561,11 @@ export class Select3 {
     deselect(value: string): void {
         if (this._locked) return;
         const option = [...this.select.options].find((o) => o.value === value);
-        if (option) option.selected = false;
+        if (option) {
+            option.selected = false;
+            // persist:false discards a user-created tag once it is removed.
+            if (!this.config.persist && option.dataset.s3created === '1') option.remove();
+        }
         this._emitter.emit('deselect', { value });
         this._changed();
         this.sync();
@@ -624,9 +647,28 @@ export class Select3 {
         this._emitter.emit('okCancel:cancel');
     }
 
+    /** Split the search value on token separators, creating a tag per token. */
+    private _consumeSeparators(): boolean {
+        const seps = this.config.tokenSeparators;
+        const cls = seps.map(escapeRegExp).join('');
+        const pattern = new RegExp(`[${cls}]`);
+        const value = this.search.value;
+        if (!pattern.test(value)) return false;
+        const parts = value.split(new RegExp(`[${cls}]`));
+        const remainder = parts.pop() ?? '';
+        parts.forEach((p) => {
+            const token = p.trim();
+            if (token) this.createTag(token);
+        });
+        this.search.value = remainder;
+        if (this.isOpen) this._renderOptions();
+        return true;
+    }
+
     createTag(label: string): void {
         const text = label.trim();
-        if (!text) return;
+        // createFilter (RegExp/string/fn) can reject invalid tags before creation.
+        if (!text || !this.config.createFilter(text)) return;
         // Use the same folded-label key as canCreate so a tag that already
         // exists (case/diacritic-insensitively) reuses that option's value
         // instead of creating a duplicate.
@@ -636,7 +678,10 @@ export class Select3 {
             this.choose(existing.value);
             return;
         }
-        this.select.add(new Option(text, text));
+        const option = new Option(text, text);
+        // Mark user-created options so persist:false can drop them on deselect.
+        option.dataset.s3created = '1';
+        this.select.add(option);
         this.choose(text);
     }
 
@@ -927,6 +972,10 @@ export class Select3 {
             else loadMore.textContent = this.config.loadingMoreText;
             this.listbox.append(loadMore);
         }
+
+        // With addPrecedence, the create row (rendered right after the matches)
+        // becomes the default highlighted action so Enter creates the tag.
+        if (canCreate && this.config.addPrecedence) this.activeIndex = this.matches.length;
 
         // Make sure the resting highlight is on a selectable row, never a
         // disabled one (e.g. when the first match is disabled after a search).
