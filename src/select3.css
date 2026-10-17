@@ -21,6 +21,22 @@
     font-size: 0.875rem;
 }
 
+/*
+ * select3 renders real <button>s (tag remove, clear, Clear all, OK/Cancel).
+ * Reset them here so they do not show the browser's native button look on
+ * pages without a CSS reset. :where() keeps this at zero specificity, so every
+ * .s3__* rule below still wins.
+ */
+:where(.s3, .s3__dropdown) button {
+    appearance: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+}
+
 .s3__control {
     display: flex;
     align-items: center;
