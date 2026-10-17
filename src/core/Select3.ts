@@ -203,6 +203,7 @@ export class Select3 {
                       max: (options.recent === true ? undefined : options.recent.max) ?? 5,
                   }
                 : null,
+            pinned: options.pinned ?? [],
             virtualScroll: options.virtualScroll ?? false,
             itemHeight: options.itemHeight ?? 36,
         };
@@ -328,10 +329,11 @@ export class Select3 {
             const option = new Option(r.label, r.value);
             option.dataset.s3remote = '1';
             // Carry rich per-row data so remote options render icon/image/etc.
-            for (const key of ['icon', 'image', 'description', 'badge'] as const) {
+            for (const key of ['icon', 'image', 'description', 'badge', 'meta'] as const) {
                 const v = r[key];
                 if (typeof v === 'string' && v !== '') option.dataset[key] = v;
             }
+            if (r.pinned === true) option.dataset.pinned = '';
             // Group remote options into an <optgroup> when the row names one.
             const group = typeof r.group === 'string' ? r.group : '';
             if (group) {
@@ -375,6 +377,9 @@ export class Select3 {
                 o.parentElement?.tagName === 'OPTGROUP'
                     ? (o.parentElement as HTMLOptGroupElement).label
                     : null,
+            pinned:
+                this.config.pinned.includes(o.value) ||
+                (o.dataset.pinned !== undefined && o.dataset.pinned !== 'false'),
             data: { ...o.dataset },
         }));
     }
@@ -1030,7 +1035,29 @@ export class Select3 {
             badge.textContent = data.badge;
             frag.append(badge);
         }
+        if (data.meta) {
+            const meta = el('span', 's3__meta');
+            meta.textContent = data.meta;
+            frag.append(meta);
+        }
         return frag;
+    }
+
+    /** Pinned items render without a group header, above every optgroup. */
+    private _displayGroup(item: Item): string | null {
+        return item.pinned ? null : item.group;
+    }
+
+    /** Move pinned items to the front: `pinned` option order first, then DOM order. */
+    private _applyPinned(items: Item[]): Item[] {
+        if (!items.some((i) => i.pinned)) return items;
+        const order = this.config.pinned;
+        const rank = (i: Item): number => {
+            const at = order.indexOf(i.value);
+            return at === -1 ? order.length : at;
+        };
+        const pinned = items.filter((i) => i.pinned).sort((a, b) => rank(a) - rank(b));
+        return [...pinned, ...items.filter((i) => !i.pinned)];
     }
 
     /** Build one dropdown option row (shared by the normal + virtual renderers). */
@@ -1042,6 +1069,11 @@ export class Select3 {
         option.setAttribute('aria-selected', item.selected ? 'true' : 'false');
         option.classList.toggle('is-selected', item.selected);
         option.classList.toggle('is-disabled', item.disabled);
+        option.classList.toggle('is-pinned', !!item.pinned);
+        // The last pinned row gets a divider separating it from the groups below.
+        if (item.pinned && !this.matches[index + 1]?.pinned && this.matches.length > index + 1) {
+            option.classList.add('s3__option--pinned-last');
+        }
 
         if (checkboxMode) {
             option.classList.add('s3__option--cb');
@@ -1086,8 +1118,9 @@ export class Select3 {
         const rows: Array<{ group: string } | { index: number }> = [];
         let lastGroup: string | null = null;
         matched.forEach((item, index) => {
-            if (item.group && item.group !== lastGroup) rows.push({ group: item.group });
-            lastGroup = item.group;
+            const group = this._displayGroup(item);
+            if (group && group !== lastGroup) rows.push({ group });
+            lastGroup = group;
             rows.push({ index });
         });
         this._vRows = rows;
@@ -1158,6 +1191,9 @@ export class Select3 {
             matched = this._applyRecent(matched);
         }
 
+        // Pinned: always lead the list (also while searching, if they match).
+        matched = this._applyPinned(matched);
+
         // Virtual scroll: window a large (non-AJAX) list to a few rendered rows.
         this._virtual = false;
         if (this.config.virtualScroll && !this.config.ajax) {
@@ -1218,14 +1254,15 @@ export class Select3 {
         const checkboxMode = this.multiple && this.config.checkboxes;
         let lastGroup: string | null = null;
         this.matches.forEach((item, idx) => {
-            if (item.group && item.group !== lastGroup) {
+            const group = this._displayGroup(item);
+            if (group && group !== lastGroup) {
                 const header = el('div', 's3__group');
                 const groupTpl = this.config.templates.optgroupHeader;
-                if (groupTpl) header.append(this._slotNode(groupTpl(item.group, this._ctx())));
-                else header.textContent = item.group;
+                if (groupTpl) header.append(this._slotNode(groupTpl(group, this._ctx())));
+                else header.textContent = group;
                 this.listbox.append(header);
             }
-            lastGroup = item.group;
+            lastGroup = group;
             this.listbox.append(this._buildOption(item, idx, rawQuery, checkboxMode));
         });
 

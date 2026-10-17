@@ -86,7 +86,7 @@ argument **or** `data-*` attributes on the element (the data attribute wins):
 </select>
 ```
 
-Per-`<option>` rich data: `data-icon`, `data-image`, `data-description`, `data-badge`
+Per-`<option>` rich data: `data-icon`, `data-image`, `data-description`, `data-badge`, `data-meta`, `data-pinned`
 (and any `data-*` you want to make searchable via `searchField`).
 
 ---
@@ -173,6 +173,7 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 | `itemHeight` | `number` | `36` | Row height for virtual scroll. |
 | `nativeOnMobile` | `boolean \| 'auto'` | `'auto'` | Use the OS picker on touch devices. |
 | `recent` | `boolean \| { key?, max? }` | — | Float recently-chosen values to the top (localStorage-backed). |
+| `pinned` | `string[]` | `[]` | Values always listed first, above every optgroup, in this order. Options with `data-pinned` are pinned too. |
 | `showCount` / `countText` | `boolean` / `(n) => string` | `false` | Result-count footer row. |
 | `i18n` / `locale` | `Partial<Locale>` | — | Per-instance translations. |
 | `plugins` | `(string \| factory \| {name, options})[]` | `[]` | Attach plugins. |
@@ -232,6 +233,28 @@ fields) — no template needed:
 ```html
 <option value="au" data-icon="fi fi-au" data-description="Oceania" data-badge="Popular">Australia</option>
 ```
+
+`data-meta` renders as muted, right-aligned secondary text (a UTC offset, a price, a count). Add it to `searchField` to make it searchable.
+
+### Pinned options
+
+Pinned options lead the list above every optgroup, without a group header, followed by a divider. They stay first while searching when they match. Pin with `data-pinned` or the `pinned` option:
+
+```html
+<select id="tz">
+  <option value="inherit" data-pinned>Same as company (Europe/London)</option>
+  <optgroup label="Africa">
+    <option value="Africa/Abidjan" data-meta="+00:00" data-keywords="Africa/Abidjan UTC+00:00">Abidjan</option>
+  </optgroup>
+</select>
+```
+
+```js
+createSelect3(tz, { searchField: ['label', 'meta', 'keywords'], searchGroups: true });
+// or pin existing values: createSelect3(tz, { pinned: ['Europe/London'] })
+```
+
+Pinned rows carry `.is-pinned`; the last one carries `.s3__option--pinned-last` for the divider. AJAX rows pin with `pinned: true` and set meta text with `meta`.
 
 Override any slot. Return a **string** (inserted as safe text) or a **DOM Node**
 (inserted as-is). select3 never uses `innerHTML`.

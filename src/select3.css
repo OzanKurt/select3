@@ -180,6 +180,21 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+.s3__option.is-pinned {
+    font-weight: 500;
+}
+/* Divider below the pinned block; takes no layout space so virtual-scroll row math holds. */
+.s3__option--pinned-last {
+    position: relative;
+}
+.s3__option--pinned-last::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -2px;
+    left: 0;
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
 .s3__check {
     font-size: 0.75rem;
     color: var(--color-primary-600, #2563eb);
@@ -330,6 +345,12 @@
     height: 1.5rem;
     object-fit: cover;
     border-radius: 0.25rem;
+}
+.s3__meta {
+    flex: none;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted, #6b7280);
 }
 .s3__badge {
     flex: none;

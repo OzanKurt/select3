@@ -146,6 +146,11 @@ export interface Select3Options {
     // UX pack: recent values, a result-count footer, and a loading spinner.
     /** Remember recently-chosen values (localStorage) and float them to the top. */
     recent?: boolean | { key?: string; max?: number };
+    /**
+     * Values always listed first, above every optgroup, in this order (e.g. a
+     * "Same as company" default). Options with `data-pinned` are pinned too.
+     */
+    pinned?: string[];
     /** Show a "N results" summary row at the foot of the dropdown. */
     showCount?: boolean;
     countText?: (n: number) => string;
@@ -189,6 +194,8 @@ export interface Item {
     disabled: boolean;
     placeholder: boolean;
     group: string | null;
+    /** Listed above all groups (via the `pinned` option or `data-pinned`). */
+    pinned?: boolean;
     /** The option's data-* attributes, for multi-field search. */
     data?: Record<string, string | undefined>;
 }
