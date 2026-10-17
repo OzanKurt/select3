@@ -1,6 +1,6 @@
 {
     "name": "@ozankurt/select3",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Modern, dependency-free <select> enhancer: single/multi, scoring search, tagging, AJAX and a WAI-ARIA combobox. The successor to Select2 / Tom Select / SumoSelect.",
     "type": "module",
     "main": "./dist/index.js",
@@ -87,9 +87,15 @@
         "vue": "^3.0.0"
     },
     "peerDependenciesMeta": {
-        "alpinejs": { "optional": true },
-        "react": { "optional": true },
-        "vue": { "optional": true }
+        "alpinejs": {
+            "optional": true
+        },
+        "react": {
+            "optional": true
+        },
+        "vue": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "@types/react": "^18.3.0",
