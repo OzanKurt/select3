@@ -1,6 +1,6 @@
 {
     "name": "@ozankurt/select3",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "Modern, dependency-free <select> enhancer: single/multi, scoring search, tagging, AJAX and a WAI-ARIA combobox. The successor to Select2 / Tom Select / SumoSelect.",
     "type": "module",
     "main": "./dist/index.js",
