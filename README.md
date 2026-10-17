@@ -94,9 +94,9 @@ argument **or** `data-*` attributes on the element (the data attribute wins):
 Per-`<option>` rich data: `data-icon`, `data-image`, `data-description`, `data-badge`, `data-meta`, `data-pinned`
 (and any `data-*` you want to make searchable via `searchField`).
 
-**Icons:** the chevron, checkmarks and remove buttons use Font Awesome 6 classes
-(`fa-solid fa-chevron-down`, `fa-xmark`, `fa-check`, `fa-spinner`). Load Font
-Awesome on the page, or those controls show no glyph.
+**Icons:** the arrow, clear and remove buttons, checkmark and spinner are
+built-in inline SVGs, so nothing else needs to be loaded. To draw them with an
+icon font instead, see [Icons](#icons).
 
 ---
 
@@ -177,6 +177,7 @@ checkboxes, and `data-image` avatars.
 | `templates` | `Select3Templates` | `{}` | Custom render slots (see below). |
 | `theme` | `string \| null` | `null` | Apply a preset: `'bootstrap4'`, `'bootstrap5'`, `'tailwind'`. |
 | `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Control density. |
+| `icons` | `'svg' \| 'fontawesome' \| { arrow?, clear?, remove?, check?, spinner? }` | `'svg'` | Icon set for select3's own controls (`data-icons`). See [Icons](#icons). |
 | `rtl` | `boolean` | auto | Right-to-left (auto-detected from `[dir=rtl]`). |
 | `classNames` | `{ wrap, control, dropdown, listbox, option, tag, search }` | `{}` | Inject your own classes. |
 | `appendTo` | `'auto' \| 'self' \| 'body' \| HTMLElement` | `'auto'` | Dropdown parent (see [modals](#modal-compatibility)). |
@@ -316,6 +317,37 @@ createSelect3(el, { theme: 'bootstrap5' });    // adds .s3--theme-bootstrap5
 ```
 
 - **`size`** (`sm`/`md`/`lg`) and **`rtl`** (auto from `[dir=rtl]`).
+
+### Icons
+
+select3 draws its own controls (the arrow, clear, tag remove, checkmark and
+loading spinner) with built-in inline SVGs that follow the text colour and size.
+No icon font is needed.
+
+To use Font Awesome 6 instead, load it on the page and pick that icon set:
+
+```js
+createSelect3(el, { icons: 'fontawesome' });
+```
+
+```html
+<select data-icons="fontawesome">…</select>
+```
+
+Or replace single icons with any icon font's classes, or with a function that
+returns a node. Icons you leave out stay SVG:
+
+```js
+createSelect3(el, {
+  icons: {
+    arrow: 'bi bi-chevron-down',          // Bootstrap Icons
+    check: () => myCheckIconElement(),
+  },
+});
+```
+
+The built-in SVGs carry `.s3__svg` and `.s3__svg--<name>` for styling. Icons you
+set per option with `data-icon` are class lists for your own icon font, as before.
 
 A dark scheme is only a set of `--color-*` values:
 

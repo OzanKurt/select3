@@ -128,6 +128,13 @@
 .s3__arrow {
     transition: transform 0.2s;
 }
+
+/* Built-in SVG icons size with the text, like an icon-font glyph would. */
+.s3__svg {
+    display: block;
+    width: 1em;
+    height: 1em;
+}
 .s3--open .s3__arrow {
     transform: rotate(180deg);
 }

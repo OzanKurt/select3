@@ -66,6 +66,19 @@ export type Transport = (url: string, init: { signal: AbortSignal }) => Promise<
 export type ProcessResults = (raw: unknown, page: number) => ProcessedResults;
 
 /** Public option bag accepted by createSelect3 / new Select3. All optional. */
+/** select3's own controls that draw an icon. */
+export type IconName = 'arrow' | 'clear' | 'remove' | 'check' | 'spinner';
+
+/** An icon-font class list (rendered as an empty <i>), or a function returning a node. */
+export type IconSource = string | (() => Node);
+
+/**
+ * 'svg' (default): built-in inline SVGs, no dependency.
+ * 'fontawesome': Font Awesome 6 classes; load Font Awesome yourself.
+ * A map overrides single icons; the rest stay SVG.
+ */
+export type IconSet = 'svg' | 'fontawesome' | Partial<Record<IconName, IconSource>>;
+
 export interface Select3Options {
     placeholder?: string;
     allowClear?: boolean;
@@ -142,6 +155,8 @@ export interface Select3Options {
      */
     theme?: string | null;
     size?: 'sm' | 'md' | 'lg';
+    /** Icons for the arrow, clear, tag remove, check and spinner (`data-icons`). Default 'svg'. */
+    icons?: IconSet;
     templates?: Select3Templates;
     // UX pack: recent values, a result-count footer, and a loading spinner.
     /** Remember recently-chosen values (localStorage) and float them to the top. */

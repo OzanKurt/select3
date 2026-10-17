@@ -23,6 +23,9 @@ import type {
     ProcessedResults,
     RemoteRow,
     AppendTo,
+    IconName,
+    IconSource,
+    IconSet,
 } from './types';
 
 export const VERSION = '1.0.0';
@@ -44,5 +47,8 @@ export type {
     ProcessedResults,
     RemoteRow,
     AppendTo,
+    IconName,
+    IconSource,
+    IconSet,
 };
 export default createSelect3;

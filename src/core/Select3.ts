@@ -25,6 +25,7 @@ import type {
     CreatedOption,
 } from '../types';
 import { getPlugin } from '../plugins/registry';
+import { classIcon, icon } from '../render/icons';
 import { Emitter } from './emitter';
 import type { Handler } from './emitter';
 import { fold } from '../search/diacritics';
@@ -50,11 +51,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): 
     return node;
 };
 
-const iconEl = (className: string): HTMLElement => {
-    const i = document.createElement('i');
-    i.className = className;
-    return i;
-};
+/** An option's own data-icon classes (the page's icon font). */
+const iconEl = (className: string): HTMLElement => classIcon(className);
 
 /** Merge a space-separated class string onto a node (style customization). */
 const addClasses = (node: HTMLElement, classes?: string): void => {
@@ -187,6 +185,7 @@ export class Select3 {
                     (typeof document !== 'undefined' && document.dir === 'rtl')),
             theme: options.theme ?? null,
             size: options.size ?? 'md',
+            icons: (select.dataset.icons as 'svg' | 'fontawesome' | undefined) ?? options.icons ?? 'svg',
             templates: options.templates ?? {},
             showCount: options.showCount ?? false,
             countText: options.countText ?? ((n: number) => `${n} result${n === 1 ? '' : 's'}`),
@@ -415,16 +414,16 @@ export class Select3 {
         this.clear.type = 'button';
         this.clear.tabIndex = -1;
         this.clear.setAttribute('aria-label', 'Clear selection');
-        this.clear.append(iconEl('fa-solid fa-xmark'));
+        this.clear.append(icon(this.config.icons, 'clear'));
         this.control.append(this.clear);
 
         this.arrow = el('span', 's3__arrow');
-        this.arrow.append(iconEl('fa-solid fa-chevron-down'));
+        this.arrow.append(icon(this.config.icons, 'arrow'));
         this.control.append(this.arrow);
 
         // Loading spinner — revealed by .s3--loading during AJAX requests.
         const spinner = el('span', 's3__spinner');
-        spinner.append(iconEl('fa-solid fa-spinner'));
+        spinner.append(icon(this.config.icons, 'spinner'));
         this.control.append(spinner);
 
         this.dropdown = el('div', 's3__dropdown');
@@ -964,7 +963,7 @@ export class Select3 {
         remove.type = 'button';
         remove.dataset.value = item.value;
         remove.setAttribute('aria-label', `Remove ${item.label}`);
-        remove.append(iconEl('fa-solid fa-xmark'));
+        remove.append(icon(this.config.icons, 'remove'));
         tag.append(text, remove);
         return tag;
     }
@@ -1083,7 +1082,7 @@ export class Select3 {
         }
 
         option.append(this._optionContent(item, rawQuery));
-        if (item.selected && !checkboxMode) option.append(iconEl('fa-solid fa-check s3__check'));
+        if (item.selected && !checkboxMode) option.append(icon(this.config.icons, 'check', 's3__check'));
 
         option.addEventListener('mouseenter', () => {
             this.activeIndex = index;
