@@ -24,8 +24,8 @@
 /*
  * select3 renders real <button>s (tag remove, clear, Clear all, OK/Cancel).
  * Reset them here so they do not show the browser's native button look on
- * pages without a CSS reset. :where() keeps this at zero specificity, so every
- * .s3__* rule below still wins.
+ * pages without a CSS reset. :where() keeps the selector at element weight (0,0,1),
+ * so every .s3__* class rule below still wins.
  */
 :where(.s3, .s3__dropdown) button {
     appearance: none;
