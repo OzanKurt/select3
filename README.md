@@ -13,6 +13,11 @@ form submission, validation, and reset all keep working.
 Written in **TypeScript**, shipped as tree-shakeable **ESM** with full type
 definitions. Works with any bundler (Vite, webpack, Rollup, esbuild).
 
+![A multi-select of reviewers with three blue tags, open on a list with Select all, checkboxes, round initials avatars and a role under each name.](docs/images/multi-select.png)
+
+Every image in this README is captured from `examples/showcase.html` with
+`npm run screenshots`.
+
 ```js
 import { createSelect3 } from '@ozankurt/select3';
 import '@ozankurt/select3/css';
@@ -89,6 +94,10 @@ argument **or** `data-*` attributes on the element (the data attribute wins):
 Per-`<option>` rich data: `data-icon`, `data-image`, `data-description`, `data-badge`, `data-meta`, `data-pinned`
 (and any `data-*` you want to make searchable via `searchField`).
 
+**Icons:** the chevron, checkmarks and remove buttons use Font Awesome 6 classes
+(`fa-solid fa-chevron-down`, `fa-xmark`, `fa-check`, `fa-spinner`). Load Font
+Awesome on the page, or those controls show no glyph.
+
 ---
 
 ## Options reference
@@ -148,6 +157,9 @@ All options are optional. Pass them as the second argument to `createSelect3(el,
 
 ### Multi-select UX
 
+See the image at the top of this README: Select all with its indeterminate state,
+checkboxes, and `data-image` avatars.
+
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `selectAll` | `boolean` | `false` | Select-All / Clear-All header (with indeterminate). |
@@ -190,6 +202,8 @@ createSelect3(el, {
 });
 ```
 
+![An office picker with "rtdm" typed in its search box and Rotterdam, Netherlands as the only match.](docs/images/fuzzy-search.png)
+
 **Independent display vs search:** point `searchField` at `data-*` fields and the
 visible label is never matched — show `AU`, search `Australia`:
 
@@ -210,6 +224,8 @@ createSelect3(el, {
   persist: false,                  // drop created tags on deselect
 });
 ```
+
+![A labels field with redesign and q4 tags and "design-system" typed, offering Create "design-system".](docs/images/tagging.png)
 
 ## AJAX
 
@@ -239,6 +255,8 @@ fields) — no template needed:
 ### Pinned options
 
 Pinned options lead the list above every optgroup, without a group header, followed by a divider. They stay first while searching when they match. Pin with `data-pinned` or the `pinned` option:
+
+![A time zone list with Same as company pinned above a divider, then a Europe group whose rows show UTC offsets on the right.](docs/images/pinned-groups.png)
 
 ```html
 <select id="tz">
@@ -298,6 +316,23 @@ createSelect3(el, { theme: 'bootstrap5' });    // adds .s3--theme-bootstrap5
 ```
 
 - **`size`** (`sm`/`md`/`lg`) and **`rtl`** (auto from `[dir=rtl]`).
+
+A dark scheme is only a set of `--color-*` values:
+
+```css
+.dark {
+  --color-surface: #1d212a;
+  --color-surface-muted: #262b36;
+  --color-content: #e5e7eb;
+  --color-muted: #9ca3af;
+  --color-border: #323846;
+  --color-primary-500: #7c9cff;
+  --color-primary-600: #6d8dff;
+  --color-primary-700: #a9bdff;
+}
+```
+
+![The reviewers multi-select in a dark scheme set only through those tokens.](docs/images/dark.png)
 
 ## Modal compatibility
 
@@ -394,3 +429,13 @@ Backspace removes the last tag, `Ctrl+A` selects all (multi).
 ## License
 
 MIT © Ozan Kurt
+
+## Development
+
+```bash
+npm install
+npm test             # Vitest
+npm run build        # tsup into dist/
+npm run examples     # the showcase on http://localhost:5184/showcase.html
+npm run screenshots  # recapture docs/images/ from the showcase
+```

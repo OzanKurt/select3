@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>select3 showcase</title>
+    <!-- select3 draws its icons (chevron, check, remove) with Font Awesome 6 classes. -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        /*
+         * A project settings form with one select per feature. Nothing here
+         * styles select3 except ?scheme=dark, which only sets the --color-*
+         * tokens select3 reads, as the README describes.
+         */
+        :root {
+            color-scheme: light;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --text: #111827;
+            --muted: #6b7280;
+            --line: #e5e7eb;
+        }
+
+        :root[data-scheme="dark"] {
+            color-scheme: dark;
+            --bg: #0f1115;
+            --card: #171a21;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --line: #272b35;
+
+            --color-surface: #1d212a;
+            --color-surface-muted: #262b36;
+            --color-content: #e5e7eb;
+            --color-muted: #9ca3af;
+            --color-border: #323846;
+            --color-primary-500: #7c9cff;
+            --color-primary-600: #6d8dff;
+            --color-primary-700: #a9bdff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font: 400 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+
+        main { width: 880px; margin: 40px auto; display: grid; gap: 20px; }
+        h1 { margin: 0; font-size: 22px; font-weight: 600; }
+        .lead { margin: -14px 0 0; color: var(--muted); }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+
+        .field { display: grid; gap: 8px; padding: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+        .field label { font-weight: 600; font-size: 13px; }
+        .field small { color: var(--muted); }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Project settings</h1>
+        <p class="lead">Atlas redesign</p>
+
+        <div class="grid">
+            <div class="field" id="field-office">
+                <label for="office">Office</label>
+                <select id="office">
+                    <option value=""></option>
+                    <option value="ams" data-description="Netherlands" data-badge="HQ">Amsterdam</option>
+                    <option value="rtm" data-description="Netherlands">Rotterdam</option>
+                    <option value="utr" data-description="Netherlands">Utrecht</option>
+                    <option value="ant" data-description="Belgium">Antwerp</option>
+                    <option value="ber" data-description="Germany" data-badge="New">Berlin</option>
+                    <option value="cph" data-description="Denmark">Copenhagen</option>
+                    <option value="lis" data-description="Portugal">Lisbon</option>
+                </select>
+                <small>Fuzzy search: "rtdm" still finds Rotterdam.</small>
+            </div>
+
+            <div class="field" id="field-reviewers">
+                <label for="reviewers">Reviewers</label>
+                <select id="reviewers" multiple>
+                    <option value="ab" selected data-description="Design lead">Amara Bello</option>
+                    <option value="jk" selected data-description="Frontend">Jonas Kowalski</option>
+                    <option value="ls" data-description="Accessibility">Lena Sørensen</option>
+                    <option value="mt" selected data-description="Product">Mateo Torres</option>
+                    <option value="py" data-description="Backend">Priya Yadav</option>
+                    <option value="sh" data-description="QA">Sam Hughes</option>
+                </select>
+                <small>Select-All, checkboxes and avatars from data-image.</small>
+            </div>
+
+            <div class="field" id="field-timezone">
+                <label for="timezone">Time zone</label>
+                <select id="timezone">
+                    <option value="inherit" data-pinned selected>Same as company (Europe/Amsterdam)</option>
+                    <optgroup label="Europe">
+                        <option value="Europe/Lisbon" data-meta="+00:00">Lisbon</option>
+                        <option value="Europe/London" data-meta="+00:00">London</option>
+                        <option value="Europe/Amsterdam" data-meta="+01:00">Amsterdam</option>
+                        <option value="Europe/Berlin" data-meta="+01:00">Berlin</option>
+                        <option value="Europe/Istanbul" data-meta="+03:00">Istanbul</option>
+                    </optgroup>
+                    <optgroup label="America">
+                        <option value="America/New_York" data-meta="-05:00">New York</option>
+                        <option value="America/Chicago" data-meta="-06:00">Chicago</option>
+                    </optgroup>
+                </select>
+                <small>A pinned option, optgroups and right-aligned offsets.</small>
+            </div>
+
+            <div class="field" id="field-labels">
+                <label for="labels">Labels</label>
+                <select id="labels" multiple>
+                    <option value="redesign" selected>redesign</option>
+                    <option value="q4" selected>q4</option>
+                    <option value="needs-review">needs-review</option>
+                    <option value="mobile">mobile</option>
+                </select>
+                <small>Tagging: type to create a label.</small>
+            </div>
+        </div>
+    </main>
+    <script type="module" src="./showcase.js"></script>
+</body>
+</html>
