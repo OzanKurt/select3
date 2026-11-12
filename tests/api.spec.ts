@@ -179,3 +179,35 @@ describe('Methods API', () => {
         expect(select.value).toBe('berlin');
     });
 });
+
+it('ignores a portaled option after its select is disabled by a fieldset', () => {
+    document.body.replaceChildren();
+    const { select, instance } = mountSelect({ opts: { appendTo: 'body' } });
+    const fieldset = document.createElement('fieldset');
+    document.body.append(fieldset);
+    fieldset.append(select, instance.wrap);
+    instance.choose('amsterdam');
+    let changes = 0;
+    select.addEventListener('change', () => changes++);
+
+    try {
+        instance.open();
+        expect(instance.dropdown.parentElement).toBe(document.body);
+        const chooseBerlin = () =>
+            Array.from(instance.dropdown.querySelectorAll<HTMLElement>('[role="option"]'))
+                .find((option) => option.textContent === 'Berlin')!.click();
+
+        fieldset.disabled = true;
+        chooseBerlin();
+        expect(select.value).toBe('amsterdam');
+        expect(changes).toBe(0);
+
+        fieldset.disabled = false;
+        instance.open();
+        chooseBerlin();
+        expect(select.value).toBe('berlin');
+        expect(changes).toBe(1);
+    } finally {
+        instance.destroy();
+    }
+});
