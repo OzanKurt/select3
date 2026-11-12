@@ -510,6 +510,15 @@ export class Select3 {
     }
 
     _bind(): void {
+        const cancelDisabledInteraction = (event: Event): void => {
+            if (!this.select.matches(':disabled')) return;
+            if (!(event instanceof KeyboardEvent && event.key === 'Tab')) event.preventDefault();
+            event.stopPropagation();
+            this.cancel();
+        };
+        for (const type of ['click', 'keydown', 'input']) {
+            this.dropdown.addEventListener(type, cancelDisabledInteraction, { capture: true });
+        }
         this.control.addEventListener('click', () => this.toggle());
         this.control.addEventListener('keydown', (e: KeyboardEvent) => {
             if (!this.isOpen && ['Enter', ' ', 'ArrowDown'].includes(e.key)) {
@@ -589,7 +598,7 @@ export class Select3 {
 
     open(): void {
         if (this._native) return; // the OS picker handles opening in native mode
-        if (this.select.disabled || this._locked || this.isOpen) return;
+        if (this.select.matches(':disabled') || this._locked || this.isOpen) return;
         if (!this._allows('beforeOpen')) return;
         this.isOpen = true;
         // Snapshot the selection so OK/Cancel can commit or revert the staging.
